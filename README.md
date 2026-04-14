@@ -18,7 +18,7 @@ REST API on your behalf. No Wireflow codebase access required.
 ## Install
 
 ```bash
-git clone https://github.com/BasedLabsINC/wireflow-skill ~/.claude/skills/wireflow
+git clone https://github.com/wireflowINC/wireflow-skill ~/.claude/skills/wireflow
 ```
 
 Claude Code automatically picks up any skill in `~/.claude/skills/`. New
