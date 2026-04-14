@@ -1,0 +1,42 @@
+{
+  "name": "Text to Image — nano_banana_2",
+  "description": "Simplest case: Text Input → FAL image generator.",
+  "tags": ["skill-example"],
+  "isActive": true,
+  "nodes": [
+    {
+      "id": "text-input-1",
+      "type": "basedNode",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "label": "Prompt",
+        "nodeType": "input:text",
+        "category": "input",
+        "config": { "prompt": "a cow standing in a futuristic neon field" }
+      }
+    },
+    {
+      "id": "nano-banana-1",
+      "type": "basedNode",
+      "position": { "x": 500, "y": 200 },
+      "data": {
+        "label": "Nano Banana 2",
+        "nodeType": "generate:nano_banana_2",
+        "category": "generate",
+        "config": {
+          "num_images": 1,
+          "aspect_ratio": "9:16"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "text-input-1",
+      "target": "nano-banana-1",
+      "sourceHandle": "out-prompt",
+      "targetHandle": "in-prompt"
+    }
+  ]
+}

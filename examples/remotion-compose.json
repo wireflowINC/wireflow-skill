@@ -1,0 +1,88 @@
+{
+  "name": "Remotion — image + audio → rendered MP4",
+  "description": "Generates one image, pairs it with uploaded audio, and feeds both into a Remotion composition for final render. Replace templateId + props with the output of GET /remotion/templates/<id>.",
+  "tags": ["skill-example", "remotion"],
+  "isActive": true,
+  "nodes": [
+    {
+      "id": "prompt-1",
+      "type": "basedNode",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "label": "Hook Prompt",
+        "nodeType": "input:text",
+        "category": "input",
+        "config": { "prompt": "a dramatic close-up of a plate of food with steam rising" }
+      }
+    },
+    {
+      "id": "audio-in-1",
+      "type": "basedNode",
+      "position": { "x": 100, "y": 500 },
+      "data": {
+        "label": "Voiceover",
+        "nodeType": "input:audio",
+        "category": "input",
+        "inputType": "audio",
+        "config": {
+          "audio": "",
+          "audioUrl": ""
+        }
+      }
+    },
+    {
+      "id": "image-gen-1",
+      "type": "basedNode",
+      "position": { "x": 500, "y": 200 },
+      "data": {
+        "label": "Nano Banana 2",
+        "nodeType": "generate:nano_banana_2",
+        "category": "generate",
+        "config": { "num_images": 1, "aspect_ratio": "9:16" }
+      }
+    },
+    {
+      "id": "remotion-1",
+      "type": "basedNode",
+      "position": { "x": 900, "y": 350 },
+      "data": {
+        "label": "Render Food Scan Video",
+        "nodeType": "compose:remotion",
+        "category": "compose",
+        "config": {
+          "templateId": "foodscan",
+          "props": {
+            "hookText": "You won't believe this",
+            "foodName": "Caesar Salad",
+            "totalCalories": 850,
+            "macros": { "protein": 35, "carbs": 80, "fats": 40 },
+            "ingredients": [
+              { "name": "Lettuce + croutons", "calories": 200, "grams": 180 },
+              { "name": "Dressing", "calories": 450, "grams": 60 }
+            ],
+            "hiddenCalories": [
+              { "name": "Olive oil", "calories": 200, "note": "added during prep" }
+            ],
+            "comparisonText": "That's more than 2 Big Macs"
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "prompt-1",
+      "target": "image-gen-1",
+      "sourceHandle": "out-prompt",
+      "targetHandle": "in-prompt"
+    },
+    {
+      "id": "edge-2",
+      "source": "image-gen-1",
+      "target": "remotion-1",
+      "sourceHandle": "out-image",
+      "targetHandle": "in-hookImage"
+    }
+  ]
+}
