@@ -28,7 +28,7 @@ list and auto-trigger on keywords like "wireflow", "build a workflow",
 
 ## Setup
 
-1. Create a scoped API key at <https://wireflow.ai/settings?tab=api-keys&section=api-keys>
+1. Create a scoped API key at <https://www.wireflow.ai/settings?tab=api-keys&section=api-keys>
    with the scopes you need: `workflows:read`, `workflows:write`,
    `workflows:execute`.
 2. Add the key to your shell profile:

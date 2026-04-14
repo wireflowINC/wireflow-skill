@@ -7,11 +7,12 @@ description: >
   "run a workflow", "generate a video with a remotion template", or wants to
   automate content creation via Wireflow.
 user-invokable: true
+argument-hint: "[templates | run <id> | generate \"<prompt>\"]"
 license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Wireflow Skill
@@ -28,7 +29,7 @@ key. No Wireflow codebase access required.
 
 ## Setup (one-time)
 
-1. Create a Wireflow API key at <https://wireflow.ai/settings/api-keys>
+1. Create a Wireflow API key at <https://www.wireflow.ai/settings?tab=api-keys&section=api-keys>
    with these scopes:
    - `workflows:read` — list workflows and templates
    - `workflows:write` — create/update workflows
@@ -41,7 +42,7 @@ key. No Wireflow codebase access required.
 
 3. (Optional) Set a custom base URL for self-hosted or staging:
    ```bash
-   export WIREFLOW_BASE_URL="https://wireflow.ai/api/v1"   # default
+   export WIREFLOW_BASE_URL="https://www.wireflow.ai/api/v1"   # default
    ```
 
 ## Core loop

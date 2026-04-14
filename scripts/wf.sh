@@ -14,18 +14,51 @@
 #   wf.sh credits                        # show remaining credits
 #
 # Env:
-#   WIREFLOW_API_KEY   (required)
-#   WIREFLOW_BASE_URL  (optional, default https://wireflow.ai/api/v1)
+#   WIREFLOW_API_KEY   (required — or place it in a .env file in cwd)
+#   WIREFLOW_BASE_URL  (optional, default https://www.wireflow.ai/api/v1)
 
 set -euo pipefail
 
-BASE="${WIREFLOW_BASE_URL:-https://wireflow.ai/api/v1}"
+# Auto-load WIREFLOW_* vars from a .env file in the current directory if
+# the key isn't already set in the environment. Keeps repo-scoped keys
+# working without asking users to `source .env` manually every session.
+# Only pulls WIREFLOW_ prefixed lines so we don't blow away other env.
+if [ -z "${WIREFLOW_API_KEY:-}" ] && [ -f ".env" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      WIREFLOW_API_KEY=*|WIREFLOW_BASE_URL=*)
+        # Strip surrounding quotes if present
+        value="${line#*=}"
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
+        export "${line%%=*}=$value"
+        ;;
+    esac
+  done < .env
+fi
+
+BASE="${WIREFLOW_BASE_URL:-https://www.wireflow.ai/api/v1}"
 
 if [ -z "${WIREFLOW_API_KEY:-}" ]; then
-  echo "error: WIREFLOW_API_KEY is not set. Create one at https://wireflow.ai/settings/api-keys" >&2
+  cat >&2 <<EOF
+error: WIREFLOW_API_KEY is not set.
+
+Options:
+  1. Create one at https://www.wireflow.ai/settings?tab=api-keys&section=api-keys
+  2. Add it to your shell profile (~/.zshrc or ~/.bashrc):
+       export WIREFLOW_API_KEY="wf_live_..."
+  3. Or put it in a .env file in the directory you run wf.sh from:
+       WIREFLOW_API_KEY=wf_live_...
+
+EOF
   exit 2
 fi
 
+# -L so 301/308 redirects (wireflow.ai → www.wireflow.ai) don't swallow
+# API responses. Vercel preserves the method + body on 308 for POST.
+CURL_FLAGS=(-sS -L)
 AUTH=(-H "Authorization: Bearer $WIREFLOW_API_KEY")
 CT=(-H "Content-Type: application/json")
 
@@ -34,24 +67,24 @@ shift || true
 
 case "$cmd" in
   templates)
-    curl -sS "${AUTH[@]}" "$BASE/remotion/templates"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/remotion/templates"
     ;;
 
   template)
     id="${1:?usage: wf.sh template <id>}"
-    curl -sS "${AUTH[@]}" "$BASE/remotion/templates/$id"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/remotion/templates/$id"
     ;;
 
   generate)
     prompt="${1:?usage: wf.sh generate \"<prompt>\"}"
-    curl -sS -N "${AUTH[@]}" "${CT[@]}" \
+    curl "${CURL_FLAGS[@]}" -N "${AUTH[@]}" "${CT[@]}" \
       -X POST "$BASE/workflows/generate/stream" \
       -d "$(jq -nc --arg p "$prompt" '{prompt:$p}')"
     ;;
 
   create)
     file="${1:?usage: wf.sh create <workflow.json>}"
-    curl -sS "${AUTH[@]}" "${CT[@]}" \
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
       -X POST "$BASE/workflows" \
       --data-binary "@$file"
     ;;
@@ -59,32 +92,32 @@ case "$cmd" in
   run)
     id="${1:?usage: wf.sh run <workflowId> <inputs.json>}"
     inputs="${2:?usage: wf.sh run <workflowId> <inputs.json>}"
-    curl -sS "${AUTH[@]}" "${CT[@]}" \
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
       -X POST "$BASE/workflows/$id/run" \
       --data-binary "@$inputs"
     ;;
 
   poll)
     exec_id="${1:?usage: wf.sh poll <executionId>}"
-    curl -sS "${AUTH[@]}" "$BASE/workflows/executions/$exec_id/poll"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/executions/$exec_id/poll"
     ;;
 
   list)
-    curl -sS "${AUTH[@]}" "$BASE/workflows"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows"
     ;;
 
   get)
     id="${1:?usage: wf.sh get <workflowId>}"
-    curl -sS "${AUTH[@]}" "$BASE/workflows/$id"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id"
     ;;
 
   inputs)
     id="${1:?usage: wf.sh inputs <workflowId>}"
-    curl -sS "${AUTH[@]}" "$BASE/workflows/$id/run"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id/run"
     ;;
 
   credits)
-    curl -sS "${AUTH[@]}" "$BASE/developer/usage"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/developer/usage"
     ;;
 
   ""|-h|--help|help)

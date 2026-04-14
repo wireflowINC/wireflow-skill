@@ -1,6 +1,6 @@
 # Wireflow API Reference
 
-Base URL: `https://wireflow.ai/api/v1` (override with `$WIREFLOW_BASE_URL`)
+Base URL: `https://www.wireflow.ai/api/v1` (override with `$WIREFLOW_BASE_URL`)
 
 Auth: `Authorization: Bearer $WIREFLOW_API_KEY`
 
@@ -176,5 +176,5 @@ Every run deducts credits based on model pricing. Check the user's
 balance:
 ```bash
 curl -H "Authorization: Bearer $WIREFLOW_API_KEY" \
-  https://wireflow.ai/api/v1/developer/usage
+  https://www.wireflow.ai/api/v1/developer/usage
 ```
