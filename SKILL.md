@@ -1,18 +1,23 @@
 ---
 name: wireflow
 description: >
-  Build and run Wireflow AI workflows via API. Create text→image, text→video,
+  Build and run Wireflow AI workflows via REST API — text→image, text→video,
   audio, and multi-step creative pipelines using FAL models, LLMs, and Remotion
-  video compositions. Use when the user says "wireflow", "build a workflow",
-  "run a workflow", "generate a video with a remotion template", or wants to
-  automate content creation via Wireflow.
+  video compositions. No Wireflow codebase access required; authenticates with
+  a scoped API key.
+when_to_use: >
+  Use when the user says "wireflow", asks to "build a workflow", "run a
+  workflow", "generate a video with a remotion template", or wants to automate
+  content creation via Wireflow. Do NOT use for direct edits to the Wireflow
+  codebase itself, or generic AI image/video requests that don't mention
+  Wireflow or its concepts (templates, compose nodes, workflows).
 user-invokable: true
 argument-hint: "[templates | run <id> | generate \"<prompt>\"]"
 license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Wireflow Skill
