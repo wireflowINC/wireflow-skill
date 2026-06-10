@@ -450,6 +450,14 @@ canvas. Canonical port sets (examples):
 "updatedAt" DESC LIMIT 1` — and put model params in `data.config`, never as
 extra `data.inputs` entries.
 
+**When you copy a real node, STRIP its cached run fields:** delete
+`data.result`, `data.resultUrl`, `data.output`, and `data.params` before reusing
+the shape. The executor's input-resolver can read these stale cache values OVER
+your fresh `data.config` (and `data.params` is read before `data.config` for
+input nodes — the V1/V2 trap below), so a left-over `result`/`params` from the
+source node makes the clone render the OLD content with no error. Author with
+`config` only; let runs write the cache.
+
 ## Best practices
 
 ### Extract system prompts as visible input:text nodes

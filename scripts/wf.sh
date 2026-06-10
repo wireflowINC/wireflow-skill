@@ -15,6 +15,7 @@
 #   wf.sh list                           # list workflows
 #   wf.sh get <workflowId>               # fetch one workflow
 #   wf.sh inputs <workflowId>            # show valid input keys for /run
+#   wf.sh download <url> [out]           # pull a render output (bypasses CDN 403)
 #   wf.sh credits                        # show remaining credits
 #
 # Env:
@@ -184,6 +185,25 @@ case "$cmd" in
   inputs)
     id="${1:?usage: wf.sh inputs <workflowId>}"
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id/run"
+    ;;
+
+  download)
+    # Pull a render/output file. cdn.wireflow.ai 403s plain curl/python (edge
+    # WAF user-agent block — infra-level, not fixable in the app), so route
+    # through the app's allowlisted download proxy: it fetches server-side (no
+    # UA block) and needs no auth. Whitelisted hosts: cdn.wireflow.ai, fal.media,
+    # replicate.delivery, storage.googleapis.com, oai blob. For other hosts it
+    # falls back to a direct fetch with a browser UA.
+    src="${1:?usage: wf.sh download <url> [out.file]}"
+    out="${2:-$(basename "${src%%\?*}")}"
+    origin="${BASE%/api/v1}"
+    case "$src" in
+      *cdn.wireflow.ai/*|*cdn.atomu.ai/*|*fal.media/*|*replicate.delivery/*|*storage.googleapis.com/*|*oaidalleapiprodscus.blob.core.windows.net/*)
+        curl -fsSL -G "$origin/api/download" --data-urlencode "url=$src" -o "$out" \
+          && echo "saved → $out" ;;
+      *)
+        curl -fsSL -A "Mozilla/5.0" "$src" -o "$out" && echo "saved → $out" ;;
+    esac
     ;;
 
   credits)

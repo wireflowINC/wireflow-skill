@@ -12,12 +12,12 @@ when_to_use: >
   codebase itself, or generic AI image/video requests that don't mention
   Wireflow or its concepts (templates, compose nodes, workflows).
 user-invokable: true
-argument-hint: "[templates | blocks | run <id> | generate \"<prompt>\"]"
+argument-hint: "[templates | blocks | nodes | check <json> | run <id> | generate \"<prompt>\"]"
 license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Wireflow Skill
