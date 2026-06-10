@@ -48,7 +48,7 @@ so existing scrim JSON keeps working — but author new fills as `rectangle`.
 
 > **Verified against the renderer 2026-06-09** (`execute-compositor.ts`). Props
 > not listed below are read NOWHERE and fail silently — don't set them expecting
-> an effect. See "Image layers" and "What's NOT supported" at the bottom.
+> an effect. See "Image layers — styling + fit" and "Still NOT supported" below.
 
 ### `gradient` / `rectangle` (scrim, color blocks, highlight bars)
 ```json
@@ -63,19 +63,20 @@ so existing scrim JSON keeps working — but author new fills as `rectangle`.
 }
 ```
 
-A `rectangle` is the SAME fill path — use it for solid color blocks and
-**highlight bars behind a word** (a sharp-cornered block; rounded corners are
-NOT supported on a standalone rectangle — see chips below). Give it explicit
-`width`/`height` (missing → warns + fills the whole stage):
+A `rectangle` is the SAME fill path — use it for solid color blocks,
+**highlight bars behind a word**, and (with `cornerRadius`) **pills / badges /
+score chips**. Give it explicit `width`/`height` (missing → warns + fills the
+whole stage):
 ```json
-"highlight_bar": {
-  "type": "rectangle", "x": 80, "y": 1540, "width": 760, "height": 210,
-  "opacity": 100,
+"score_chip": {
+  "type": "rectangle", "x": 80, "y": 120, "width": 240, "height": 110,
+  "opacity": 100, "cornerRadius": 28,
   "fill": { "kind": "solid", "color": "#e11d48" }
 }
 ```
 `fill` is `{kind:'solid',color}` | `{kind:'linear',angle,stops}` |
 `{kind:'radial',cx,cy,r,stops}`; a bare `fill:"#hex"` string also works (solid).
+`cornerRadius` (alias `borderRadius`) rounds the corners — 0/omit = sharp.
 
 ### `text` (the headline / hook / CTA)
 ```json
@@ -96,8 +97,25 @@ NOT supported on a standalone rectangle — see chips below). Give it explicit
   listing them in `layerOrder`.
 - Text props the renderer honors: `text`, `fontFamily`, `fontWeight`,
   `fontStyle`, `fontSize`, `fill`, `align`, `width`, `lineHeight`, `autoFit*`,
-  `stroke`+`strokeWidth`, `shadowColor`/`shadowBlur`/`shadowOffsetX/Y`, and
-  `textBg` (below). `letterSpacing` is **read but NOT applied** — don't rely on it.
+  `stroke`+`strokeWidth`, `shadowColor`/`shadowBlur`/`shadowOffsetX/Y`, `textBg`
+  (below), and `highlightWord`/`highlightFill` (below). `letterSpacing` is
+  **read but NOT applied** — don't rely on it.
+
+### Highlight one word in a headline — `highlightWord`
+
+The meme-ad move: recolor a single word in the brand color. Set `highlightWord`
+(the literal substring) + `highlightFill` (its color); optional `highlightBg`
+draws a block behind it. First match per line, any alignment:
+```json
+"hook": {
+  "type": "text", "text": "YOUR 3PM CRASH STARTS AT 8AM",
+  "fill": "#ffffff", "fontFamily": "Anton", "fontSize": 150, "x": 90, "y": 1500,
+  "highlightWord": "3PM", "highlightFill": "#ffd400"
+}
+```
+Renders in the final **PNG** (the API/factory output). Note: the in-editor live
+preview + node thumbnail still show it single-color for now (a fast-follow) — the
+rendered MP4/PNG is correct, so for API authoring this Just Works.
 
 ### Rounded chips / score badges / pills — use `text.textBg`
 
@@ -124,27 +142,52 @@ Helvetica, Georgia, Times New Roman) render without a fetch. If a fetch fails it
 falls back to Inter — so an unknown/misspelled family silently becomes Inter.
 `x/y` are top-left px on the stage; `fill` is hex.
 
-### Image layers — what's honored vs ignored (verified)
+### Image layers — styling + fit (verified)
 
-An `image` layer (e.g. `layer_1`) honors ONLY `x`, `y`, `scaleX`, `scaleY`,
-`rotation`, `opacity`. `cornerRadius`, `shadow*`, and `border`/`stroke` are
-**read NOWHERE** — setting them does nothing (a floating-screenshot look with a
-rounded shadow is not achievable in the compositor today). To round/shadow a
-screenshot, bake it into the source image before compositing.
+An `image` layer (e.g. `layer_1`) honors `x`, `y`, `scaleX`, `scaleY`,
+`rotation`, `opacity`, plus:
+- **`fit`**: `"cover"` | `"contain"` | `"stretch"` — object-fit against the
+  stage. The **background** layer auto-covers when its image ≠ the stage size
+  (so a non-stage-ratio bg no longer tiles top-left); set `fit` explicitly on any
+  image layer to override.
+- **`cornerRadius`** (alias `borderRadius`) — rounded corners (the
+  floating-screenshot look).
+- **`shadowColor` / `shadowBlur` / `shadowOffsetX` / `shadowOffsetY`** — drop
+  shadow. Bake the alpha into an `rgba()` `shadowColor`.
+- **`imageBorderColor` / `imageBorderWidth`** — a stroke around the image
+  (dedicated names, NOT `stroke`).
 
-### What's NOT supported (don't author these — they fail silently)
+```json
+"screenshot": {
+  "url": "...", "x": 240, "y": 600, "scaleX": 0.5, "scaleY": 0.5,
+  "cornerRadius": 48, "imageBorderColor": "#ffffff", "imageBorderWidth": 6,
+  "shadowColor": "rgba(0,0,0,0.45)", "shadowBlur": 60, "shadowOffsetY": 24
+}
+```
+All render in the final **PNG** and the node thumbnail. (The interactive
+editor-modal preview of these image props is a fast-follow; the output is
+correct.)
 
-- **Per-word / per-span text styling** (one highlighted word in a headline).
-  Text is single-style; the closest tool is a separate text layer + `textBg`.
-- **Image-layer corner radius / drop shadow / border** (see above).
-- **Standalone rounded-rect / pill shapes** — round corners only via `textBg`.
-- **Background fit/object-fit (cover/contain/stretch).** The background is blit
-  at 0,0 at its natural size; a non-stage-ratio image is effectively stretched
-  by the stage. **Fix at the source:** generate the background at the stage's
-  aspect. The compositor stage is **1856×2304 (4:5)** — `generate:openai_gpt_image_2`
-  CANNOT do 4:5 (maxes at 2:3 portrait → ~11% stretch), but
-  `generate:nano_banana_pro` / `nano_banana_2` / `nano_banana` all expose
-  `aspect_ratio: "4:5"`. Use a nano_banana model for compositor backgrounds.
+### Background sizing — still prefer stage-aspect for quality
+
+`fit:"cover"` crops to fill, so a wrong-aspect background loses pixels. For the
+sharpest result still generate the bg at the stage aspect. The compositor stage
+is **1856×2304 (4:5)** — `generate:openai_gpt_image_2` can't do 4:5 (maxes at
+2:3), but `generate:nano_banana_pro` / `nano_banana_2` / `nano_banana` all expose
+`aspect_ratio: "4:5"`. Use a nano_banana model for compositor backgrounds.
+
+### Image-gen `image_size`: pass a `{width,height}` DICT, not a string
+
+`generate:openai_gpt_image_2` (and other `IMAGE_SIZE` models) want
+`image_size` as either a **preset string** (`"square_hd"`, `"portrait_4_3"`, …)
+or a **`{"width":N,"height":N}` object** (arbitrary positive dims accepted, e.g.
+`{"width":1856,"height":2304}`). A bare `"1024x1536"` STRING is rejected by the
+provider at runtime — `wf check` now catches it pre-flight with a fix.
+
+### Still NOT supported
+
+- **Per-word styling beyond a single highlight** (multiple differently-styled
+  spans). Use `highlightWord` for one word; stack separate text layers for more.
 - **Logo/watermark slot.** No built-in brand layer — add the wordmark as a
   normal `image` layer (burns a `layer_*` port) positioned by hand.
 
@@ -164,14 +207,15 @@ input:text (sysprompt) ─┘   (emits JSON: per-slide   (paths: map JSON→port
   - `paths`: a JSON string mapping **output handle → JSON path** in the LLM output,
     e.g. `{"s1_prompt":"slide1_scene","s1_layers":"slide1_layers","caption":"caption", …}`.
     Produces handles `out-s1_prompt … out-sN_prompt`, `out-s1_layers … out-sN_layers`, `out-caption`.
-  - ⚠️ **Silent-fail (verified):** if a path isn't found in the LLM JSON (LLM
-    renamed a key, emitted fewer slides than `paths` expects, or wrapped the JSON
-    in prose), that handle emits an **empty string and the node still reports
-    success** — the downstream compositor renders blank with no error. The only
-    signal is an amber "N missing fields" badge on the node in the UI (console
-    log otherwise). So: keep the LLM's key names EXACTLY matching `paths`, pin
-    the slide count, and after a run sanity-check that every `out-sN_*` handle is
-    non-empty before trusting the comps. The extractor does strip ```` ```json ````
+  - ⚠️ **Partial-miss (verified):** if a path isn't found in the LLM JSON (LLM
+    renamed a key, emitted fewer slides than `paths` expects), that handle emits
+    an **empty string and the node still reports success** (partial extraction is
+    intentional) — the downstream compositor renders blank. The node now attaches
+    `output._warnings.missingPaths` listing the missed path keys (and shows an
+    amber "N missing fields" badge in the UI), incl. `*`-fanout paths with holes.
+    So: keep the LLM's key names EXACTLY matching `paths`, pin the slide count,
+    and after a run check `output._warnings` / that every `out-sN_*` handle is
+    non-empty before trusting the comps. The extractor strips ```` ```json ````
     fences and a `{text:"…"}` wrapper, so prose-wrapped JSON is handled; renamed
     or missing keys are not.
   - `wrap`: `{ "keys": ["s1_prompt", …], "prefix": "<art-style prefix>", "suffix": "<…NO text rendered…>" }`

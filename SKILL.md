@@ -17,7 +17,7 @@ license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.5.1"
+  version: "0.6.0"
 ---
 
 # Wireflow Skill
