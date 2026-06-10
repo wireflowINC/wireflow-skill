@@ -248,6 +248,41 @@ template **once per item** and emits an **array of N images** on `out-image`.
   or an image array, or literal URLs). Everything that stays constant lives in the
   template as a global layer.
 
+### Feeding the batch from AI generation — `utility:build_data` ⭐
+
+The `data` port wants **literal** values (text + image URLs), but a real ad
+factory **generates** them at runtime (the LLM writes copy, a model makes the
+backgrounds). The **`utility:build_data`** node bridges that — it zips an LLM
+records array with a generated-images array, by index, into the `data` array:
+
+```
+input:text (topic) ─► llm (emits [{headline, stat}, …])  ──► build_data.in-records ─┐
+                                                                                     ├─► build_data.out-data ─► compv3.in-data ─► N branded ads
+llm prompts ─► generate:nano_banana_pro (N images, an array) ─► build_data.in-images ┘
+```
+
+- **`build_data` inputs:** `records` (the LLM's JSON array, e.g.
+  `[{"headline":"…","stat":"…"}, …]`) + `images` (an array of generated images).
+  **Config `imageKey`** (default `"bg"`) = which layer the image URL lands in.
+- It zips by index → `[{headline, stat, bg:<url>}, …]` on `out-data`; wire that
+  straight into `compv3.in-data`. Length mismatches are zipped to the longer side
+  and reported in `output._warnings.build`.
+- **This is the one-Compositor factory.** One brand template + this connector
+  replaces the old "one compositor per slide" wiring below. Use it whenever the
+  copy and/or backgrounds are generated rather than literal.
+- Make the LLM emit a clean **array of objects** whose keys match your bound layer
+  keys (`headline`, `stat`, …). `wf.sh nodes` lists `utility:build_data`
+  (`records`, `images` → `data`); `wf.sh check` validates the edges.
+
+### Authoring the data inline (no wiring) — the Batch panel
+
+For hand-made variations, the Compositor editor has a **"Batch" toggle** (a
+spreadsheet UI): columns = your text/image layers, rows = variations, with live
+per-row previews and a "Generate" button. It persists to
+`node.data.data.batchData`, which the engine reads as the **fallback** when no
+`in-data` edge is wired. So a human can build a batch with zero graph wiring; an
+agent should still prefer wiring `in-data` (from `build_data` or a JSON node).
+
 ## The factory pattern (older: one compositor per slide)
 
 > Prefer the single **`data`-port** node above for same-layout variations. The N-node
