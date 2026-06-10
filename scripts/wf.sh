@@ -4,8 +4,12 @@
 # Usage:
 #   wf.sh templates                      # list remotion templates
 #   wf.sh template <id>                  # fetch one template spec
+#   wf.sh nodes                          # node catalog (every type + its ports)
+#   wf.sh blocks                         # motion-graphics block library
 #   wf.sh generate "<prompt>"            # AI-generate a workflow from a prompt
-#   wf.sh create <workflow.json>         # create a workflow from a JSON file
+#   wf.sh check <workflow.json>          # GATE: graph-lint (caps+cycle+handles)
+#   wf.sh create <workflow.json>         # create (gated on check; auto-layout)
+#   wf.sh layout <workflow.json> [out]   # re-space nodes (no overlap), no API call
 #   wf.sh run <workflowId> <inputs.json> # run a workflow with inputs
 #   wf.sh poll <executionId>             # poll execution status
 #   wf.sh list                           # list workflows
@@ -75,6 +79,46 @@ case "$cmd" in
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/remotion/templates/$id"
     ;;
 
+  blocks)
+    # Catalog of reusable motion-graphics Blocks (id, props schema, ports,
+    # preview). Compose one as a SceneGraph scene: {type:'block',blockId,props}.
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/blocks"
+    ;;
+
+  nodes)
+    # The node catalog — every node type + its ports (what you can wire).
+    # This is the source of truth `check` validates edge handles against.
+    # Pipe to jq to filter, e.g.: wf.sh nodes | jq '.nodes[] | select(.category=="Audio")'
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/nodes"
+    ;;
+
+  check)
+    # THE GATE — graph-lint a workflow JSON ({nodes,edges}) before create/run:
+    # caps + cycle + dangling-edge + the handle-vs-catalog pass (the silent
+    # break the catalog exists to kill). Exit 0 = safe, 1 = errors (with fixes).
+    # Uses the ONE graph-lint source in the repo (no drift); run from repo root.
+    file="${1:?usage: wf.sh check <workflow.json>}"
+    if [ -f "scripts/wf-check.ts" ]; then
+      npx tsx scripts/wf-check.ts "$file"
+    else
+      echo "wf check needs the wireflow repo (run from the repo root)" >&2
+      exit 2
+    fi
+    ;;
+
+  see)
+    # The taste loop — render a SceneGraph at 20/55/85% of its duration and
+    # download PNGs so you can LOOK and self-correct. Budget-capped (3 stills).
+    # Block scenes need an inline bundledUrl. Run from the repo root.
+    file="${1:?usage: wf.sh see <sceneGraph.json>}"
+    if [ -f "scripts/wf-see.ts" ]; then
+      npx tsx scripts/wf-see.ts "$file"
+    else
+      echo "wf see needs the wireflow repo (run from the repo root)" >&2
+      exit 2
+    fi
+    ;;
+
   generate)
     prompt="${1:?usage: wf.sh generate \"<prompt>\"}"
     curl "${CURL_FLAGS[@]}" -N "${AUTH[@]}" "${CT[@]}" \
@@ -84,9 +128,35 @@ case "$cmd" in
 
   create)
     file="${1:?usage: wf.sh create <workflow.json>}"
+    # GATE: never POST a graph that fails graph-lint. Set WF_SKIP_CHECK=1 to
+    # override (e.g. authoring a dynamic-port-heavy graph the static gate
+    # can't fully verify). Run from the repo root so wf-check.ts is found.
+    if [ -z "${WF_SKIP_CHECK:-}" ] && [ -f "scripts/wf-check.ts" ]; then
+      if ! npx tsx scripts/wf-check.ts "$file" >&2; then
+        echo "✗ create blocked — fix the errors above (or WF_SKIP_CHECK=1 to override)" >&2
+        exit 1
+      fi
+    fi
+    # Auto-layout before create so programmatically-authored nodes don't
+    # overlap (they have no rendered DOM to measure). Opt out: WF_SKIP_LAYOUT=1
+    send="$file"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -z "${WF_SKIP_LAYOUT:-}" ] && command -v python3 >/dev/null 2>&1 \
+       && [ -f "$SCRIPT_DIR/layout.py" ]; then
+      tmp="$(mktemp)"
+      if python3 "$SCRIPT_DIR/layout.py" "$file" "$tmp" >/dev/null 2>&1; then
+        send="$tmp"
+      fi
+    fi
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
       -X POST "$BASE/workflows" \
-      --data-binary "@$file"
+      --data-binary "@$send"
+    ;;
+
+  layout)
+    file="${1:?usage: wf.sh layout <workflow.json> [out.json]}"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    python3 "$SCRIPT_DIR/layout.py" "$file" "${2:-}"
     ;;
 
   run)

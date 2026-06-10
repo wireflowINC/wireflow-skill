@@ -29,10 +29,40 @@ Create a new workflow (omit `id`) or update an existing one (include `id`).
 
 **Response:**
 ```json
-{ "data": { "id": "cmnxw...", "name": "My Workflow", ... } }
+{
+  "data": { "id": "cmnxw...", "name": "My Workflow", ... },
+  "meta": { "migrations": [ ... ], "warnings": [ ... ] }
+}
 ```
 
+`meta.migrations` lists what the server normalized for you (e.g. a deprecated
+`compose:remotion` rewritten to `video:remotion`, a sticky note's `node.type`
+set to `stickyNote`, or a `video:remotion` template's input ports materialized).
+`meta.warnings` are non-blocking lint notes.
+
 Empty workflows (0 nodes, 0 edges) are rejected as likely frontend bugs.
+
+**Graph validation (fail-closed).** Before saving, the server normalizes the
+graph and runs the SAME graph-lint gate as `wf check`. If the graph has errors
+(unknown `nodeType`, deprecated alias that can't be auto-migrated, a dangling
+edge, an edge to a port that doesn't exist, or a cycle) it returns **HTTP 422**:
+
+```json
+{
+  "error": { "type": "invalid_request_error", "code": "invalid_graph",
+             "message": "Workflow graph failed validation (N errors). ..." },
+  "violations": [ { "rule": "bad-target-handle", "message": "...",
+                    "fix": "Did you mean \"in-hookImage\"? ...",
+                    "nodeId": "...", "edgeId": "..." } ],
+  "warnings": [ ... ],
+  "migrations": [ ... ]
+}
+```
+
+Each violation carries a concrete `fix` (often a "did you mean" suggestion).
+Run `wf check <workflow.json>` locally first to catch these before POSTing.
+Pass `?strict=false` to save a graph despite errors (rare — only for
+dynamic-port graphs the static gate can't fully verify).
 
 ### `GET /workflows` — list user workflows
 
@@ -152,7 +182,7 @@ workflow JSON. Final event contains `{ done: true, workflow: { id, ... } }`.
 **Scope:** `workflows:read`
 
 Returns the full template spec. Use `inputMappings` to know which prop
-paths the `compose:remotion` node should expose as input ports.
+paths the `video:remotion` node should expose as input ports.
 
 ## Rate limits & errors
 

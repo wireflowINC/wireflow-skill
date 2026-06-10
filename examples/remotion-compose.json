@@ -1,6 +1,6 @@
 {
-  "name": "Remotion — image + audio → rendered MP4",
-  "description": "Generates one image, pairs it with uploaded audio, and feeds both into a Remotion composition for final render. Replace templateId + props with the output of GET /remotion/templates/<id>.",
+  "name": "Remotion — image → rendered MP4 (foodscan template)",
+  "description": "Generates one image and feeds it into a Remotion composition (foodscan template) for final render. Replace templateId + props with the output of GET /remotion/templates/<id>; the template's input ports (here hookImage) are materialized on save.",
   "tags": ["skill-example", "remotion"],
   "isActive": true,
   "nodes": [
@@ -13,21 +13,6 @@
         "nodeType": "input:text",
         "category": "input",
         "config": { "prompt": "a dramatic close-up of a plate of food with steam rising" }
-      }
-    },
-    {
-      "id": "audio-in-1",
-      "type": "basedNode",
-      "position": { "x": 100, "y": 500 },
-      "data": {
-        "label": "Voiceover",
-        "nodeType": "input:audio",
-        "category": "input",
-        "inputType": "audio",
-        "config": {
-          "audio": "",
-          "audioUrl": ""
-        }
       }
     },
     {
@@ -44,10 +29,10 @@
     {
       "id": "remotion-1",
       "type": "basedNode",
-      "position": { "x": 900, "y": 350 },
+      "position": { "x": 900, "y": 200 },
       "data": {
         "label": "Render Food Scan Video",
-        "nodeType": "compose:remotion",
+        "nodeType": "video:remotion",
         "category": "compose",
         "config": {
           "templateId": "foodscan",
@@ -81,7 +66,7 @@
       "id": "edge-2",
       "source": "image-gen-1",
       "target": "remotion-1",
-      "sourceHandle": "out-image",
+      "sourceHandle": "out-images",
       "targetHandle": "in-hookImage"
     }
   ]

@@ -1,7 +1,10 @@
 # Using Remotion Templates
 
-A `compose:remotion` node renders a final MP4 using one of Wireflow's
-registered React-based video templates. The user CANNOT add new templates
+A `video:remotion` node renders a final MP4 using one of Wireflow's
+registered React-based video templates. (The node type was formerly
+`compose:remotion`; the API still accepts that name and rewrites it to
+`video:remotion` on save, but author new graphs with `video:remotion`.)
+The user CANNOT add new templates
 via the API — those are code-level compositions that live in the
 wireflow repo and ship through a CI deploy pipeline. The skill can only
 **configure** existing templates.
@@ -35,7 +38,7 @@ The single-template response includes:
   "position": { "x": 800, "y": 200 },
   "data": {
     "label": "Render Ohnie Reel",
-    "nodeType": "compose:remotion",
+    "nodeType": "video:remotion",
     "category": "compose",
     "config": {
       "templateId": "ohnie-reel",
@@ -103,10 +106,10 @@ leave the wirable fields for edges to populate at execution time.
 input:text (prompt)
      │ out-prompt
      ▼
-generate:kling_1_6_pro (video gen)
+video:kling_video_v2_6_pro_text_to_video (video gen)
      │ out-video
      ▼
-compose:remotion (templateId: ohnie-reel, shot_1 port)
+video:remotion (templateId: ohnie-reel, shot_1 port)
      │ out-video
      ▼
 (final MP4)

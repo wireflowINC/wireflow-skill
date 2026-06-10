@@ -67,7 +67,10 @@ use `type: "stickyNote"`. Otherwise use `type: "basedNode"`.
 - **`inputs` / `outputs`** — typed port definitions. **Declare these
   explicitly** on any node whose ports should be visually connectable.
   If you omit `inputs: []`, BasedNode renders zero input handles and
-  edges targeting that node won't visually attach.
+  edges targeting that node won't visually attach. **Include ONLY the
+  port inputs (`isPort:true`), not config fields** — see "The node catalog
+  is NOT a clone source" below. Same goes for `category`: derive it from
+  the nodeType, don't copy the catalog's UI-group value.
 
 ## Edge
 
@@ -286,6 +289,7 @@ notes, design annotations, and inline documentation.
   "position": { "x": 40, "y": 40 },
   "width": 520,
   "height": 260,
+  "style": { "width": 520, "height": 260 },
   "data": {
     "label": "README",
     "nodeType": "utility:sticky_note",
@@ -297,7 +301,7 @@ notes, design annotations, and inline documentation.
 }
 ```
 
-**Two gotchas that silently break sticky notes:**
+**Three gotchas that silently break sticky notes:**
 
 1. **Top-level `type` must be `"stickyNote"`**, NOT `"basedNode"`. React
    Flow routes nodes to their renderer by this field. If you use
@@ -307,6 +311,14 @@ notes, design annotations, and inline documentation.
 2. **Content lives at `data.text`**, NOT `data.config.text`. The
    StickyNoteNode component reads from `data.text` directly. Writing
    to `data.config.text` silently does nothing.
+
+3. **Size lives in `style.{width,height}`**, not just top-level
+   `width`/`height`. The sticky renders via a React Flow `NodeResizer`
+   that reads `style`; a size set only on top-level width/height (or
+   omitted) collapses to a tiny ~200×100 default and clips the text. Set
+   both `style` and the top-level fields (mirror them). `wf.sh create`'s
+   layout pass auto-fixes + auto-sizes stickies, so this only bites when
+   you skip layout.
 
 Optional styling: `data.color` (one of `yellow`, `pink`, `blue`,
 `green`, `purple`) and `data.textSize` (`small`, `medium`, `large`).
@@ -403,6 +415,40 @@ For `video:kling_video_2_5_i2v`, valid values are: `3.0-pro`,
 `3.0-standard`, `2.6-pro`, `o1`, `2.5-pro`, `2.5-standard`,
 `2.1-master`. Default to `2.5-pro` unless you have a reason to pick
 otherwise.
+
+### The node catalog (`wf.sh nodes`) is NOT a clone source for `node.data`
+
+`wf.sh nodes` / `GET /api/v1/nodes` is for **discovery** — finding which
+nodeTypes and ports exist. Do NOT copy its node objects verbatim into your
+`node.data`. Two fields differ from what a persisted node needs, and both fail
+SILENTLY (graph-lint + the API accept them; the bug only shows on the canvas):
+
+**1. Catalog `category` is the UI sidebar group, not the execution category.**
+The catalog returns things like `"Helpers"`, `"edit"`, `"Editing"`. But
+`data.category` must be the EXECUTION category the renderer + engine use. Using
+the catalog value makes the node render as a generic icon-only card (e.g. a Text
+Input with no editable prompt field). Set it from the **nodeType**:
+- prefixed → the prefix: `input:text`→`input`, `generate:*`→`generate`,
+  `video:*`→`video`, `utility:/llm:/audio:/edit:/iterator:/process:` → that prefix.
+- non-prefixed → special-case: `compv3` (Compositor) → `process`.
+
+**2. Catalog `inputs` is a FLAT list with no `isPort` — don't dump it all.**
+A persisted node's `data.inputs` contains ONLY the connectable **port** inputs
+(each `isPort: true`). Config-only fields (`aspect_ratio`, `num_images`,
+`resolution`, `quality`, `duration`, `generate_audio`, …) live ONLY in
+`data.config`. The catalog lists ports AND config fields together with no flag,
+so dumping them all exposes every config knob as a connectable port on the
+canvas. Canonical port sets (examples):
+- `generate:nano_banana_pro` → `[prompt, image1]`
+- `video:bytedance_seedance_v1_lite_text_to_video` → `[prompt, image_url,
+  end_image_url, reference_image_urls]`
+- `compv3` → `[background, layer_1, layers]`
+
+**The reliable fix for both:** copy `data.inputs` / `data.outputs` /
+`data.category` from a REAL UI-created node of that nodeType —
+`SELECT nodes FROM "Workflow" WHERE nodes::text LIKE '%"<nodeType>"%' ORDER BY
+"updatedAt" DESC LIMIT 1` — and put model params in `data.config`, never as
+extra `data.inputs` entries.
 
 ## Best practices
 

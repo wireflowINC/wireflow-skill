@@ -25,7 +25,7 @@
         "category": "llm",
         "config": {
           "model": "anthropic/claude-sonnet-4-5",
-          "systemPrompt": "You turn short prompts into rich, cinematic video descriptions optimized for Kling 1.6 Pro. Include camera movement, lighting, atmosphere, and style. Output only the expanded prompt, no preamble.",
+          "systemPrompt": "You turn short prompts into rich, cinematic video descriptions optimized for Kling. Include camera movement, lighting, atmosphere, and style. Output only the expanded prompt, no preamble.",
           "userPrompt": ""
         }
       }
@@ -35,13 +35,10 @@
       "type": "basedNode",
       "position": { "x": 900, "y": 200 },
       "data": {
-        "label": "Kling 1.6 Pro",
-        "nodeType": "generate:kling_1_6_pro",
-        "category": "generate",
-        "config": {
-          "duration": 5,
-          "aspect_ratio": "9:16"
-        }
+        "label": "Kling v2.6 Pro (text→video)",
+        "nodeType": "video:kling_video_v2_6_pro_text_to_video",
+        "category": "video",
+        "config": { "duration": 5, "aspect_ratio": "9:16" }
       }
     }
   ],
