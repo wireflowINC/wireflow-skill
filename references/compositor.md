@@ -207,6 +207,10 @@ template **once per item** and emits an **array of N images** on `out-image`.
 - `string` value = shorthand: a **text** layer's `.text`, an **image** layer's `.url`.
 - `object` value = merged onto the layer, e.g. `{ "text": "…", "fill": "#FF6B00" }`
   (nested `transform` is deep-merged).
+- **Keep editor-preview placeholders in your bound layers** (e.g. `stat: "0%"`,
+  `headline: "TEMPLATE"`). A data override **beats** the template's existing value
+  at render — you do NOT need to leave bound fields empty. (Both render paths,
+  including a layer the template already had a value for.)
 
 ```jsonc
 // compv3 config.layers  — the template, authored ONCE. logo+scrim+fonts are global.
