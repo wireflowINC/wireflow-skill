@@ -188,12 +188,67 @@ provider at runtime — `wf check` now catches it pre-flight with a fix.
 
 - **Per-word styling beyond a single highlight** (multiple differently-styled
   spans). Use `highlightWord` for one word; stack separate text layers for more.
-- **Logo/watermark slot.** No built-in brand layer — add the wordmark as a
-  normal `image` layer (burns a `layer_*` port) positioned by hand.
 
-## The factory pattern (mass-produce variations in one workflow)
+> **Logo/watermark IS supported now** — add the wordmark as a normal `image`
+> layer in the template and simply DON'T list it in any `data` item. It becomes a
+> **global** layer that renders identically on every output (see *Batch / template
+> mode* above). That's the reusable brand slot.
 
-This is how the "LinkedIn Carousel — BasedHealth" / ad-meme factory is wired:
+## Batch / template mode — ONE node, N images (the `data` port) ⭐
+
+**This is the reusable-brand-layout pattern.** Instead of one `compv3` per output,
+build ONE compv3 whose saved layers ARE your brand template (logo, brand bar, fonts,
+scrim, layout), and wire a JSON **array** into its `data` port. The node renders the
+template **once per item** and emits an **array of N images** on `out-image`.
+
+- Each item lists ONLY the layer keys it overrides. A layer NOT named in any item
+  renders **identically every time** — that's a **global** layer (your logo, brand
+  bar, background style, fonts). This is the logo/brand slot you've wanted.
+- `string` value = shorthand: a **text** layer's `.text`, an **image** layer's `.url`.
+- `object` value = merged onto the layer, e.g. `{ "text": "…", "fill": "#FF6B00" }`
+  (nested `transform` is deep-merged).
+
+```jsonc
+// compv3 config.layers  — the template, authored ONCE. logo+scrim+fonts are global.
+{
+  "logo":     { "type": "image", "url": "https://…/brand-logo.png", "x": 80, "y": 80, "width": 220 },
+  "scrim":    { "type": "rectangle", "x": 0, "y": 1400, "width": 1080, "height": 600,
+                "fill": {"kind":"linear","angle":0,"stops":[{"color":"#00000000","offset":0},{"color":"#000000CC","offset":1}]} },
+  "headline": { "type": "text", "text": "TEMPLATE", "fontFamily": "Inter", "fontWeight": 800,
+                "fontSize": 96, "fill": "#ffffff", "x": 80, "y": 1560 },
+  "stat":     { "type": "text", "text": "0%", "fontFamily": "Inter", "fontWeight": 900,
+                "fontSize": 140, "fill": "#FF6B00", "x": 80, "y": 1720 }
+}
+```
+```jsonc
+// wire this array into compv3.in-data  → 3 on-brand ads; logo + fonts identical on all 3
+[
+  { "headline": "Cut sugar cravings", "stat": "-42%", "bg": "https://…/a.png" },
+  { "headline": "Sleep deeper",        "stat": "+1.3h", "bg": "https://…/b.png" },
+  { "headline": "Track every meal",    "stat": "10s",   "bg": "https://…/c.png" }
+]
+```
+
+- **Output:** `out-image` carries the **array** → wire to `output:preview` (renders a
+  gallery) or iterate downstream. `output.url` = first image (back-compat),
+  `output.count` = N, `output.failedItems` / `output._warnings.dataItems` flag any
+  per-item problems (a data key matching no layer is reported, never a silent blank).
+- **Absent / non-array `data` → single render** (exact back-compat).
+- **Cost:** local @napi-rs/canvas render — **no FAL credits**. Capped at **50 items**,
+  4 concurrent.
+- **Validate first:** `bash scripts/wf.sh check workflow.json` (graph-lint) checks the
+  `in-data` edge and flags a data key that matches no template layer with a
+  did-you-mean — so a typo fails free, before a run. Discover the port with
+  `bash scripts/wf.sh nodes | …` (compv3 now lists `data:JSON`).
+- The `bg` values above are per-item background URLs (e.g. from N `nano_banana` nodes,
+  or an image array, or literal URLs). Everything that stays constant lives in the
+  template as a global layer.
+
+## The factory pattern (older: one compositor per slide)
+
+> Prefer the single **`data`-port** node above for same-layout variations. The N-node
+> wiring below is only needed when each output needs a **genuinely different layout**.
+> This is how the "LinkedIn Carousel — BasedHealth" / ad-meme factory was wired:
 
 ```
 input:text (topic) ─────┐
@@ -227,12 +282,14 @@ input:text (sysprompt) ─┘   (emits JSON: per-slide   (paths: map JSON→port
   from its nano_banana node and its text from the matching `out-sN_layers`.
 - Output of each `compv3` → `out-image` → an `action:social_publish`, `output:preview`,
   or just downloaded for the ad manager.
-- **Pulling the finals:** a factory run yields N `out-image` URLs across N comp
-  nodes — there's no zip/"download all" endpoint, so read each comp's `out-image`
-  from the poll result and pull it with `bash scripts/wf.sh download <url> sN.png`
-  (routes through the allowlisted proxy — a direct curl to `cdn.wireflow.ai`
-  **403s** on the edge WAF's user-agent block).
+- **Pulling the finals:** with the **`data`-port** node, one comp emits all N URLs
+  in `output.image[]` (read `output.image[i].url` from the poll result). The older
+  N-node factory yields N `out-image` URLs across N comp nodes. Either way there's no
+  zip/"download all" endpoint — pull each with `bash scripts/wf.sh download <url> sN.png`
+  (routes through the allowlisted proxy — a direct curl to `cdn.wireflow.ai` **403s**
+  on the edge WAF's user-agent block).
 
 **To add a real product screenshot** (e.g. phone with the app open), wire an
 `input:image` into `compv3.in-layer_1` and add a `layer_1` entry (image type) to
-`layerOrder` above the background.
+`layerOrder` above the background. A bare image-**URL string** feeding an image
+port now works directly (it used to crash on the layer merge — fixed).
