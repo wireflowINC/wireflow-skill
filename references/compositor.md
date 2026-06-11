@@ -332,3 +332,47 @@ input:text (sysprompt) ─┘   (emits JSON: per-slide   (paths: map JSON→port
 `input:image` into `compv3.in-layer_1` and add a `layer_1` entry (image type) to
 `layerOrder` above the background. A bare image-**URL string** feeding an image
 port now works directly (it used to crash on the layer merge — fixed).
+
+## Editing layers on an EXISTING compositor (programmatic layer management)
+
+The template layers live ON the node at `node.data.data`:
+
+```jsonc
+{
+  "stage":      { "width": 1080, "height": 1350 },   // canvas px
+  "layers":     {                                     // keyed by layer id
+    "background": { "url": "https://…", "fit": "cover" },
+    "scrim":      { "type": "rectangle", "x": 0, "y": 0, "width": 1080, "height": 1350,
+                    "opacity": 60, "fill": { "kind": "linear", "angle": 0, "stops": [
+                      { "color": "rgba(0,0,0,0.85)", "offset": 0 },
+                      { "color": "rgba(0,0,0,0)",    "offset": 1 } ] } },
+    "headline":   { "type": "text", "text": "HEADLINE", "x": 64, "y": 96,
+                    "fontSize": 96, "fontFamily": "DM Sans", "fontWeight": "bold",
+                    "fill": "#FFFFFF", "width": 952 },
+    "logo":       { "url": "data:image/png;base64,…", "x": 64, "y": 1180 }
+  },
+  "layerOrder": ["background", "scrim", "headline", "logo"]   // bottom → top
+}
+```
+
+To add/change/remove layers on a workflow that already exists:
+
+1. `bash scripts/wf.sh get <workflowId>` → save the JSON.
+2. Edit the compositor node's `data.data.layers` + `data.data.layerOrder`
+   (add a text layer, tweak a scrim, reorder — same shapes as the `layers`
+   port JSON documented above; `layerOrder` is bottom-up, last = topmost).
+3. `bash scripts/wf.sh update <workflowId> wf.json` — graph-lint + auto-layout
+   run automatically.
+
+Notes that save you a redo:
+
+- **Don't touch `data.output`** — it's the cached render; the engine
+  re-renders when inputs/layers actually changed (hash-gated).
+- Layer `opacity` is **0–100**, gradient stop alpha lives in the rgba color,
+  stop `offset` is 0–1.
+- A `background` image layer with no explicit `fit` cover-fits the stage
+  automatically when its size differs from the stage.
+- Batch rows override layer content per-output by key (`headline` row cell →
+  `headline` layer text). Keys with no matching layer are ignored.
+- The user's editor previews the FIRST wired data row on the canvas, so a
+  template with placeholder content still LOOKS live once data is wired.

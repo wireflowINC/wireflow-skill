@@ -9,6 +9,7 @@
 #   wf.sh generate "<prompt>"            # AI-generate a workflow from a prompt
 #   wf.sh check <workflow.json>          # GATE: graph-lint (caps+cycle+handles)
 #   wf.sh create <workflow.json>         # create (gated on check; auto-layout)
+#   wf.sh update <workflowId> <wf.json>  # replace (gated on check; auto-layout)
 #   wf.sh layout <workflow.json> [out]   # re-space nodes (no overlap), no API call
 #   wf.sh run <workflowId> <inputs.json> # run a workflow with inputs
 #   wf.sh poll <executionId>             # poll execution status
@@ -151,6 +152,32 @@ case "$cmd" in
     fi
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
       -X POST "$BASE/workflows" \
+      --data-binary "@$send"
+    ;;
+
+  update)
+    id="${1:?usage: wf.sh update <workflowId> <workflow.json>}"
+    file="${2:?usage: wf.sh update <workflowId> <workflow.json>}"
+    # Same gates as create: never PUT a graph that fails graph-lint, and
+    # re-layout before sending — edited graphs (added/removed nodes) are the
+    # main source of overlapping "vibe-coded" canvases.
+    if [ -z "${WF_SKIP_CHECK:-}" ] && [ -f "scripts/wf-check.ts" ]; then
+      if ! npx tsx scripts/wf-check.ts "$file" >&2; then
+        echo "✗ update blocked — fix the errors above (or WF_SKIP_CHECK=1 to override)" >&2
+        exit 1
+      fi
+    fi
+    send="$file"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -z "${WF_SKIP_LAYOUT:-}" ] && command -v python3 >/dev/null 2>&1 \
+       && [ -f "$SCRIPT_DIR/layout.py" ]; then
+      tmp="$(mktemp)"
+      if python3 "$SCRIPT_DIR/layout.py" "$file" "$tmp" >/dev/null 2>&1; then
+        send="$tmp"
+      fi
+    fi
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+      -X PUT "$BASE/workflows/$id" \
       --data-binary "@$send"
     ;;
 

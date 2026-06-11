@@ -17,7 +17,7 @@ license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.8.0"
+  version: "0.9.0"
 ---
 
 # Wireflow Skill
@@ -68,10 +68,16 @@ When the user asks you to build or run a Wireflow workflow:
 4. **Create** — `bash scripts/wf.sh create workflow.json` → returns `id`.
    Positions are auto-laid-out first so nodes never overlap (see *Clean
    layout* below) — don't hand-pick `x`/`y`.
-5. **Run** — `bash scripts/wf.sh run <id> '{"inputs": {"<nodeId>": "..."}}'`
-6. **Poll** — `bash scripts/wf.sh poll <executionId>` until `status:
+5. **Edit** — to modify an existing workflow (add nodes, change layers,
+   rewire), fetch it (`wf.sh get <id>`), edit the JSON, and send it back with
+   `bash scripts/wf.sh update <id> workflow.json`. NEVER raw-PUT an edited
+   graph: `update` re-runs graph-lint AND auto-layout, so the canvas the
+   user opens is clean — edited graphs are the main source of overlapping
+   nodes.
+6. **Run** — `bash scripts/wf.sh run <id> '{"inputs": {"<nodeId>": "..."}}'`
+7. **Poll** — `bash scripts/wf.sh poll <executionId>` until `status:
    COMPLETED`
-7. **Return** — hand the user the workflow URL (so they can inspect/remix
+8. **Return** — hand the user the workflow URL (so they can inspect/remix
    in the visual editor) and the final output URL (image, MP4, MP3)
 
 ## Blocks (reusable motion-graphics scenes)
@@ -105,7 +111,7 @@ inline text length, node family) and runs a layered left-to-right DAG layout
 height; sticky notes parked above their section). No browser, no codebase
 access — pure computation, so it works for every workflow.
 
-- It's automatic on `create`. Opt out with `WF_SKIP_LAYOUT=1`.
+- It's automatic on `create` AND `update`. Opt out with `WF_SKIP_LAYOUT=1`.
 - Re-space an existing JSON without creating: `bash scripts/wf.sh layout wf.json out.json`.
 - Sanity-check overlaps: `python3 scripts/layout.py --check wf.json`.
 - Set positions to anything when authoring — they're recomputed. Just keep
