@@ -17,9 +17,9 @@ bold headline). Renders server-side to a PNG. Pairs with `generate:nano_banana_*
     "label": "Compositor 1",
     "config": {},
     "inputs": [
-      { "id": "background", "type": "IMAGE", "label": "Background", "required": false },
-      { "id": "layer_1",    "type": "IMAGE", "label": "Layer 1",   "required": false },
-      { "id": "layers",     "type": "TEXT",  "label": "Layers (JSON)", "required": false }
+      { "id": "background", "type": "IMAGE",   "label": "Background", "required": false },
+      { "id": "layer_1",    "type": "IMAGE",   "label": "Layer 1",   "required": false },
+      { "id": "data",       "type": "UNKNOWN", "label": "Batch data (array)", "required": false }
     ],
     "outputs": [ { "id": "image", "type": "IMAGE", "label": "Output" } ],
     "data": {
@@ -31,14 +31,25 @@ bold headline). Renders server-side to a PNG. Pairs with `generate:nano_banana_*
 }
 ```
 
-- **`data.data`** is the editor/canvas state: `stage` (canvas px), `layers` (per-layer
-  geometry), `layerOrder` (z-order, bottom→top). For programmatic use you can leave a
-  minimal `layers`/`layerOrder` and drive content through the **`layers` input port**.
-- **Ports (target handles):** `in-background` (the base image), `in-layer_1` (an optional
-  overlay image, e.g. a phone mockup), `in-layers` (the **TEXT** JSON below).
-- **Output (source handle):** `out-image`.
+- **🔴 The canvas lives on `node.data.data` — NOT a port.** `data.data` holds
+  `stage` (canvas px), `layers` (per-layer geometry, keyed by layer name), and
+  `layerOrder` (z-order, bottom→top). There is **no** `layers` port; author the
+  whole canvas on `data.data`. A standalone compv3 (canvas on `data.data`, no
+  edges) renders on its own — no dummy upstream node needed.
+- **Ports (target handles)** — there are exactly three:
+  - `in-background` — an image for the **`background`** layer. ⚠️ A layer named
+    `background` MUST already exist in `data.data.layers`/`layerOrder`, or the
+    image silently won't render (you'll get a `data.warnings` entry now).
+  - `in-layer_1` — an image for the **`layer_1`** layer (same named-layer rule).
+  - `in-data` — a **BATCH override ARRAY** (renders the template once per item).
+    NOT the canvas — feeding a `{stage,layers,layerOrder}` object here renders
+    blank (now flagged in `data.warnings`).
+- **Output (source handle):** `out-image` (compv3 emits port id `image`).
+- **Upstream image nodes** (`input:image`, `generate:*`) emit **`out-media`**
+  (port id `media`) — wire `input:image.out-media → compv3.in-background`. (They
+  do NOT emit `out-image`.)
 
-## The `layers` JSON (fed into `in-layers`)
+## The `layers` JSON (on `data.data.layers`)
 
 A JSON **object** keyed by layer name. Each key is a layer; `layerOrder` (in
 `data.data`) decides z-order. The renderer switches on exactly four kinds —
@@ -168,6 +179,34 @@ All render in the final **PNG** and the node thumbnail. (The interactive
 editor-modal preview of these image props is a fast-follow; the output is
 correct.)
 
+### `draw` (freehand strokes — sketch a motion path) ⭐ agent-drawable
+
+You can **draw on the image headlessly** — no canvas needed. A `draw` layer
+bakes a freehand polyline into the output PNG. Verified in `execute-compositor.ts`:
+
+```json
+"carPath": {
+  "type": "draw", "x": 0, "y": 0,
+  "points": [820,300, 640,330, 470,360, 300,380],
+  "stroke": "#ff3b30", "strokeWidth": 8, "opacity": 100
+}
+```
+
+- **`points`** is a FLAT array `[x0,y0, x1,y1, …]` in **stage pixels** (the 1856×2304
+  stage, same space as every other layer's x/y). The renderer smooths it with
+  quadratic curves and round caps.
+- Props the renderer honors: `points`, `stroke` (hex), `strokeWidth`, `opacity`,
+  `x`/`y` (offset added to every point).
+
+**Why an agent would draw:** the **Seedance / i2v "follow the path"** technique —
+sketch a red arrow from a subject toward where it should move, then feed the
+flattened compositor PNG into an i2v node (Seedance/Kling). The model follows the
+drawn path. To turn a friendly arrow into `points`, sample the segment yourself:
+`from:[x0,y0] → to:[x1,y1]` becomes `points:[x0,y0, …midpoints…, x1,y1]` (a curved
+arrow = add the bend points). ⚠️ The stroke IS baked into the image — it can bleed
+into the generated video, so keep it thin/short and prefer a color that reads as
+direction, not content.
+
 ### Background sizing — still prefer stage-aspect for quality
 
 `fit:"cover"` crops to fill, so a wrong-aspect background loses pixels. For the
@@ -293,7 +332,7 @@ agent should still prefer wiring `in-data` (from `build_data` or a JSON node).
 input:text (topic) ─────┐
                         ├─► llm:openrouter_router ─► utility:json_multi_extract ─┬─► generate:nano_banana_pro (sN) ─► compv3.in-background
 input:text (sysprompt) ─┘   (emits JSON: per-slide   (paths: map JSON→ports;     │
-                            scene prompt + layers)     wrap: prepend/append art   └─► compv3.in-layers   (the sN_layers JSON)
+                            scene prompt + layers)     wrap: prepend/append art   └─► sN_layers JSON → written onto each compv3's data.data (NOT a port)
                                                        style to scene prompts)
 ```
 

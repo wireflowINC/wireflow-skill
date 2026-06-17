@@ -1,0 +1,113 @@
+{
+  "name": "UGC Ad — image → i2v → reel + VO + captions + endcard",
+  "description": "Canonical headless ad pipeline. Generate the visual (nano-banana → Kling i2v), generate the voiceover (ElevenLabs), transcribe it for karaoke captions (Whisper), then pipe all three into a video:remotion SceneGraph. NOTE 1: audio + captions flow purely by WIRING the ports — you do NOT hand-author audioTrack/captionTrack; the write path adds the {{audio}}/{{captions}} tokens for you (visible in `wf.sh get`) and the render fills them. NOTE 2: swap the endcard block — run `wf.sh blocks --use endcard`, grab a renderable blockId, and replace ENDCARD_BLOCK_ID below. NOTE 3: you can author every node by nodeType + config; ports + category are hydrated from the registry on create. Verify cheap first: `wf.sh preview` the sceneGraph.",
+  "tags": ["skill-example", "ad", "ugc", "remotion"],
+  "isActive": true,
+  "nodes": [
+    {
+      "id": "img-prompt",
+      "type": "basedNode",
+      "position": { "x": 80, "y": 80 },
+      "data": {
+        "label": "Visual prompt",
+        "nodeType": "input:text",
+        "category": "input",
+        "config": { "prompt": "UGC selfie-style shot of a person holding the product in a sunlit kitchen, candid, iPhone look, 9:16" }
+      }
+    },
+    {
+      "id": "img",
+      "type": "basedNode",
+      "position": { "x": 80, "y": 320 },
+      "data": {
+        "label": "Nano Banana 2",
+        "nodeType": "generate:nano_banana_2",
+        "category": "edit",
+        "config": { "num_images": 1, "aspect_ratio": "9:16" }
+      }
+    },
+    {
+      "id": "clip",
+      "type": "basedNode",
+      "position": { "x": 480, "y": 320 },
+      "data": {
+        "label": "Kling i2v",
+        "nodeType": "video:kling_video_v2_6_pro_image_to_video",
+        "category": "video",
+        "config": { "prompt": "subtle handheld motion, the person smiles and gestures toward the product", "duration": 5 }
+      }
+    },
+    {
+      "id": "script",
+      "type": "basedNode",
+      "position": { "x": 80, "y": 560 },
+      "data": {
+        "label": "VO script",
+        "nodeType": "input:text",
+        "category": "input",
+        "config": { "prompt": "Okay I did NOT expect this to actually work. Three days in and my skin is glowing. Link's in my bio, go." }
+      }
+    },
+    {
+      "id": "tts",
+      "type": "basedNode",
+      "position": { "x": 480, "y": 560 },
+      "data": {
+        "label": "ElevenLabs VO",
+        "nodeType": "audio:elevenlabs_tts_custom_voice",
+        "category": "audio",
+        "config": { "voice_id": "21m00Tcm4TlvDq8ikWAM", "stability": 0.4, "similarity_boost": 0.75 }
+      }
+    },
+    {
+      "id": "whisper",
+      "type": "basedNode",
+      "position": { "x": 880, "y": 560 },
+      "data": {
+        "label": "Whisper (captions)",
+        "nodeType": "audio:whisper",
+        "category": "audio",
+        "config": { "task": "transcribe", "chunk_level": "word" }
+      }
+    },
+    {
+      "id": "reel",
+      "type": "basedNode",
+      "position": { "x": 1280, "y": 320 },
+      "data": {
+        "label": "Render ad",
+        "nodeType": "video:remotion",
+        "category": "video",
+        "config": {
+          "sceneGraph": {
+            "fps": 30,
+            "width": 1080,
+            "height": 1920,
+            "scenes": [
+              { "type": "video", "src": "{{avatarVideo}}", "durationInFrames": 150 },
+              {
+                "type": "block",
+                "blockId": "ENDCARD_BLOCK_ID",
+                "durationInFrames": 90,
+                "props": {
+                  "appName": "Your Brand",
+                  "tagline": "Try it today",
+                  "ctaText": "Shop now"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "img-prompt", "target": "img", "sourceHandle": "out-prompt", "targetHandle": "in-prompt" },
+    { "id": "e2", "source": "img", "target": "clip", "sourceHandle": "out-images", "targetHandle": "in-image_url" },
+    { "id": "e3", "source": "clip", "target": "reel", "sourceHandle": "out-video", "targetHandle": "in-avatarVideo" },
+    { "id": "e4", "source": "script", "target": "tts", "sourceHandle": "out-prompt", "targetHandle": "in-text" },
+    { "id": "e5", "source": "tts", "target": "reel", "sourceHandle": "out-audio", "targetHandle": "in-audio" },
+    { "id": "e6", "source": "tts", "target": "whisper", "sourceHandle": "out-audio", "targetHandle": "in-audio_url" },
+    { "id": "e7", "source": "whisper", "target": "reel", "sourceHandle": "out-word_timestamps", "targetHandle": "in-captions" }
+  ]
+}

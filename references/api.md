@@ -89,6 +89,11 @@ dynamic-port graphs the static gate can't fully verify).
 Higher-level wrapper around `/execute`. Takes friendly `inputs` keyed by
 the node ID of input-category nodes.
 
+> ⚠️ **`/run` re-executes the WHOLE graph** — every node runs fresh, so any
+> non-deterministic AI gen (image/Kling/etc.) is **re-rolled** and the media
+> changes on each run. To re-render just one node and KEEP the existing
+> upstream creatives, use single-node execution (below) — not `/run`.
+
 **Scope:** `workflows:execute`
 
 **Body:**
@@ -108,6 +113,29 @@ GET /workflows/:id/run
 which returns the list of input node IDs, labels, types, and defaults.
 
 **Response:** `{ data: { executionId, status: "RUNNING" } }`
+
+### `POST /workflows/:id/execute` — run ONE node, reuse cached upstream
+
+The "re-render just this node" path (the editor's "Run selected"). Pass
+`targetNodeId`: only that node **+ any upstream dependency that lacks a cached
+result** runs; every other node is passed through for its data (cached output
+reused — no re-roll). This is how you re-render a `video:remotion` node after a
+caption/graph edit without re-generating the (good, expensive) Kling/image gens.
+
+**Scope:** `workflows:execute`
+
+**Body:** the full saved graph + the target:
+```json
+{ "nodes": [ ... ], "edges": [ ... ], "targetNodeId": "reel" }
+```
+The nodes carry their cached `output`/`result` (fetch them with
+`GET /workflows/:id`), which is what lets the executor skip the upstream gens.
+The workflow must be active. A server-side credit pre-check still runs.
+
+**Response:** `{ executionId, status }` — poll with the same poll endpoint.
+
+**Skill shortcut:** `wf.sh run-node <workflowId> <nodeId>` does the fetch +
+reshape + POST for you, then `wf.sh poll <executionId>`.
 
 ### `GET /workflows/executions/:id/poll` — poll status
 

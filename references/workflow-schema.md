@@ -64,13 +64,19 @@ use `type: "stickyNote"`. Otherwise use `type: "basedNode"`.
   downstream node, Wireflow reads `config[key]` first for input-category
   nodes — so setting `config.prompt = "a cow"` on a Text Input node is
   the correct way to bake in a default prompt.
-- **`inputs` / `outputs`** — typed port definitions. **Declare these
-  explicitly** on any node whose ports should be visually connectable.
-  If you omit `inputs: []`, BasedNode renders zero input handles and
-  edges targeting that node won't visually attach. **Include ONLY the
-  port inputs (`isPort:true`), not config fields** — see "The node catalog
-  is NOT a clone source" below. Same goes for `category`: derive it from
-  the nodeType, don't copy the catalog's UI-group value.
+- **`inputs` / `outputs`** — typed port definitions (the wireable handles).
+  **Include ONLY the port inputs, not config fields.** Every input in
+  `wf.sh nodes` now carries **`isPort`**: `true` = a wireable port (goes in
+  `inputs`, e.g. Kling `image_url`/`prompt`); `false` = a sidebar config field
+  (goes in `data.config`, e.g. Kling `duration`/`aspect_ratio`/`cfg_scale`). In
+  the compact `wf.sh nodes` markdown, config inputs are tagged `~cfg`.
+  - **Easiest: just set `nodeType` + `config` + edges and let the server do it.**
+    On create/update, the write path hydrates the node's canonical ports from
+    the registry and **prunes any config field you accidentally put in `inputs`**
+    (it reports this in the response `diagnostics` as `node.ports_hydrated`).
+    So a stray-port mistake is now auto-corrected, not shipped. Same for
+    `category` — derived from the nodeType, you don't need to set it.
+  - You only need to hand-author `inputs` for non-registry/custom nodes.
 
 ## Edge
 
@@ -133,23 +139,31 @@ Same pattern for wiring an LLM's `out-text` into a FAL image generator's
 
 Outputs: `out-prompt`, `out-text` (same value, two handle aliases).
 
-### `input:image` — image upload input
+### `input:image` — the universal "Import" node (image / video / audio)
+
+Despite the `:image` name, this is THE media-import node for **every** media type
+(label "Import", desc "Upload image, video, or audio"). It's the only input node
+that renders a preview + icon on the canvas. Use it for stills, video clips, and
+audio alike — set `inputType` + `config.mediaType` per the media. **Never use the
+legacy `input:video` / `input:audio` nodes** (blank render, hidden from the
+catalog, deprecated).
 
 ```json
-{
-  "data": {
-    "nodeType": "input:image",
-    "category": "input",
-    "inputType": "image",
-    "config": {
-      "image": "https://cdn.wireflow.ai/uploads/...png",
-      "imageUrl": "https://cdn.wireflow.ai/uploads/...png"
-    }
-  }
-}
+// still
+{ "data": { "nodeType": "input:image", "category": "input", "inputType": "image",
+    "config": { "image": "https://cdn.wireflow.ai/uploads/...png",
+                "imageUrl": "https://cdn.wireflow.ai/uploads/...png",
+                "mediaType": "IMAGE" } } }
+
+// video clip — SAME nodeType, just inputType/mediaType = video
+{ "data": { "nodeType": "input:image", "category": "input", "inputType": "video",
+    "config": { "image": "https://cdn.wireflow.ai/...mp4",
+                "imageUrl": "https://cdn.wireflow.ai/...mp4",
+                "mediaType": "VIDEO", "mediaDimensions": "1080×1920" } } }
 ```
 
-Outputs: `out-image`, `out-media`, `out-url`.
+Outputs: `out-image`, `out-media`, `out-url`. Wire downstream from **`out-media`**
+(its type follows the imported media: VIDEO for a clip, AUDIO for a sound).
 
 ### `generate:<model>` — FAL / Replicate / etc. generator
 
