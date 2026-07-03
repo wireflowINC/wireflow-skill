@@ -100,14 +100,19 @@ When the user asks you to build or run a Wireflow workflow:
 > grab the `executionId` → `wf.sh wait <executionId>`.
 >
 > Every poll response carries `nodeStates: [{ nodeId, label, status, error,
-> outputUrl, progress, requestId }]` — per-node `PENDING | RUNNING | COMPLETED |
-> FAILED` with the error string on a failure (a FAL moderation rejection shows
-> here as `FAILED` + the provider message, not a silent hang), plus `progress`
-> and the FAL `requestId` for support/debug. `outputUrl` is the **normalized**
-> media URL across every output shape — a node's raw `output` is inconsistent
-> (`output.url` on some models, `output.images[0].url` on others, string vs
-> object), so prefer `nodeStates[].outputUrl`. A `429` means you hit the rate
-> limit (~10/min) — slow down; `wf.sh wait` already paces itself.
+> outputUrl, outputUrls, text, progress, requestId }]` — per-node `PENDING |
+> RUNNING | COMPLETED | FAILED` with the error string on a failure (a FAL
+> moderation rejection shows here as `FAILED` + the provider message, not a
+> silent hang), plus `progress` and the FAL `requestId` for support/debug.
+> `outputUrl` is the **normalized** primary media URL across every output shape
+> — a node's raw `output` is inconsistent (`output.url` on some models,
+> `output.images[0].url` on others, string vs object), so prefer
+> `nodeStates[].outputUrl`. **`outputUrls` is the full set** — a batch/loop node
+> (e.g. a compositor that runs once per loop item to make N ads) returns every
+> URL it produced here, not just the last one; `outputUrl` is the first/primary
+> for back-compat. **`text`** carries generated copy (LLM output, extractors) so
+> non-media outputs are reachable via the API too. A `429` means you hit the
+> rate limit (~10/min) — slow down; `wf.sh wait` already paces itself.
 
 ## Using your own assets (upload)
 
@@ -130,6 +135,18 @@ url=$(bash scripts/wf.sh upload https://example.com/logo.png)  # rehost a remote
 - `bash scripts/wf.sh media` lists what you've uploaded (upload once, reuse the
   URL across runs).
 - Needs the `workflows:write` scope (same key that creates workflows).
+
+> ⚠️ **Always rehost through `wf.sh upload`. Never wire an image into a workflow
+> by a non-`cdn.wireflow.ai` URL — not even another wireflow.ai subdomain like
+> `assets.wireflow.ai`, and not your own/agent storage endpoint.** Those hosts
+> usually don't send CORS headers, and a compositor (`compv3`) layer loads its
+> images into a canvas with `crossOrigin`. A non-CORS URL renders **blank in the
+> editor canvas** even though it looks fine in the node preview and the rendered
+> output (the server bake has no browser CORS check). It's intermittent — cache
+> state decides — so it reads as a flaky "image randomly disappears" bug. The
+> upload endpoint returns a `cdn.wireflow.ai` URL, which is CORS-clean and
+> first-party. If you already have a remote URL, pass it straight to
+> `wf.sh upload <url>` to rehost it onto the CDN before using it.
 
 This is the missing primitive for "show the actual product" ad/brand workflows —
 capture → `wf.sh upload` → build the factory around the URL → run.
@@ -503,12 +520,42 @@ access — pure computation, so it works for every workflow.
   estimate is off (e.g. a node with a big cached result panel, or the editor
   caps a long text field shorter than estimated).
 
+## Organize like a codebase
+
+A flat graph reads like a 500-line function. Make graphs **legible** the way you
+make code legible — these primitives all already exist:
+
+- **DRY** — text reused by 2+ nodes is a magic string. Hoist it into ONE
+  `input:text` node and fan its output into every consumer (one output → many
+  inputs is native). Compose shared fragments with `utility:prompt_concat`.
+- **Modules** — wrap nodes by responsibility in a labelled `custom_group` box
+  (`data.childNodeIds` = members; it's visual-only, excluded from execution).
+  A reader should see `① Source  ② Hero  ③ B-roll  ④ Endcard  ⑤ Assembly`.
+- **Swimlanes** — `organize` lays modules out as disjoint horizontal bands with
+  dataflow left→right, so boxes never overlap and the graph reads like an
+  architecture diagram.
+
+Author new graphs already organized (emit groups + shared constants directly),
+and refactor inherited/grown ones with:
+
+```bash
+wf.sh organize <id>                  # heuristic plan → apply (non-destructive)
+wf.sh organize <id> --dump-plan      # see the proposed modules, change nothing
+wf.sh organize <id> --plan plan.json # apply a semantic plan you hand-authored
+```
+
+Hybrid flow for real graphs: `--dump-plan`, then edit the modules/labels to
+match intent (you're the semantic half), then re-apply with `--plan`. Full
+guide + plan shape: **`references/organize.md`**.
+
 ## Reference files
 
 Read these on demand when composing workflows:
 
 - `references/workflow-schema.md` — node + edge JSON shape, input ports,
   common patterns
+- `references/organize.md` — refactor graphs like a codebase: DRY constants,
+  `custom_group` modules, swimlane layout, the `organize` verb + plan shape
 - `references/api.md` — full REST API surface with curl examples
 - `references/remotion-templates.md` — how to construct a `video:remotion`
   node from a template spec

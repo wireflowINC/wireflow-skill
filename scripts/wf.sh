@@ -12,6 +12,7 @@
 #   wf.sh create <workflow.json>         # create (gated on check; auto-layout)
 #   wf.sh update <workflowId> <wf.json>  # replace (gated on check; auto-layout)
 #   wf.sh layout <workflow.json> [out]   # re-space nodes (no overlap), no API call
+#   wf.sh organize <workflowId>          # refactor live graph: DRY constants + module groups + swimlanes (--dump-plan / --plan p.json)
 #   wf.sh run <workflowId> <inputs.json> # run a workflow with inputs (re-runs ALL nodes)
 #   wf.sh run-node <workflowId> <nodeId> # re-run ONE node (fresh config), reuse cached upstream
 #   wf.sh run-force <workflowId>         # full re-roll: clear ALL cached output first (--no-cache)
@@ -75,6 +76,31 @@ fi
 CURL_FLAGS=(-sS -L)
 AUTH=(-H "Authorization: Bearer $WIREFLOW_API_KEY")
 CT=(-H "Content-Type: application/json")
+
+# Status-aware curl for WRITES. Retries on 429 (rate limit) with backoff, then
+# prints the response BODY followed by a final line carrying the HTTP status
+# code — callers MUST check that code and fail loud on non-2xx. This exists
+# because plain `curl` + `printf "$resp"` silently swallows a 429/4xx body and
+# exits 0, so a write that never landed reads as success and a render proceeds
+# on stale/wrong cached data (the dogfooding footgun). Server sends
+# X-RateLimit-Reset (epoch), not Retry-After, so we use simple linear backoff.
+#   echoes: <body>\n<http_code>   (caller: code=$(tail -n1); body=$(sed '$d'))
+wf_curl() {
+  local tries=0 max="${WF_MAX_RETRIES:-4}" resp code
+  while :; do
+    resp=$(curl "${CURL_FLAGS[@]}" -w $'\n%{http_code}' "$@")
+    code=$(printf '%s' "$resp" | tail -n1)
+    if [ "$code" = "429" ] && [ "$tries" -lt "$max" ]; then
+      local backoff=$(( (tries + 1) * 15 ))
+      echo "⏳ rate-limited (429) — backing off ${backoff}s (retry $((tries + 1))/$max)" >&2
+      sleep "$backoff"
+      tries=$((tries + 1))
+      continue
+    fi
+    printf '%s' "$resp"
+    return 0
+  done
+}
 
 cmd="${1:-}"
 shift || true
@@ -207,15 +233,102 @@ case "$cmd" in
         send="$tmp"
       fi
     fi
-    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
-      -X PUT "$BASE/workflows/$id" \
-      --data-binary "@$send"
+    # Optimistic concurrency: base this edit on the workflow's current
+    # updatedAt and send it as baseUpdatedAt, so the server REJECTS (409) if
+    # another session/agent saved since — instead of silently clobbering it
+    # (the parallel-agent data-loss). Skip with WF_SKIP_CONCURRENCY=1.
+    if [ -z "${WF_SKIP_CONCURRENCY:-}" ]; then
+      base_ts=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id" \
+        | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print(""); raise SystemExit
+print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
+      if [ -n "$base_ts" ]; then
+        merged="$(mktemp)"
+        BASE_TS="$base_ts" python3 -c 'import json,os,sys
+d=json.load(open(sys.argv[1])); d["baseUpdatedAt"]=os.environ["BASE_TS"]
+json.dump(d, open(sys.argv[2],"w"))' "$send" "$merged" && send="$merged"
+      fi
+    fi
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+      -X PUT "$BASE/workflows/$id" --data-binary "@$send")
+    code=$(printf '%s' "$resp" | tail -n1)
+    body=$(printf '%s' "$resp" | sed '$d')
+    printf '%s\n' "$body"
+    if [ "$code" = "409" ]; then
+      echo "✗ CONFLICT (409): the workflow changed since you loaded it — another session/agent saved. Your write was NOT applied (no clobber). Re-fetch with 'wf.sh get $id', reapply your edit, and update again." >&2
+      exit 2
+    fi
+    # Fail loud on ANY non-2xx (incl. a persistent 429 after retries) — a
+    # swallowed write that reads as success is the worst footgun for a render.
+    case "$code" in
+      2*) ;;
+      *) echo "✗ update FAILED (HTTP $code): write did NOT land — fix the error above before running anything downstream." >&2; exit 1 ;;
+    esac
     ;;
 
   layout)
     file="${1:?usage: wf.sh layout <workflow.json> [out.json]}"
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     python3 "$SCRIPT_DIR/layout.py" "$file" "${2:-}"
+    ;;
+
+  organize)
+    # Refactor a live graph "like a codebase": hoist text reused by 2+ nodes
+    # into shared input:text constants, wrap related nodes into labelled
+    # custom_group modules, and re-space everything as swimlanes (X = dataflow,
+    # Y = module band). Non-destructive: only adds groups/constants + moves nodes.
+    #
+    #   wf.sh organize <id>                  # heuristic plan -> apply (PUT)
+    #   wf.sh organize <id> --dump-plan      # print the proposed plan, no changes
+    #   wf.sh organize <id> --plan plan.json # apply a hand-authored (semantic) plan
+    #   wf.sh organize <id> --save out.json  # also write the organized graph locally
+    #
+    # Hybrid workflow: `--dump-plan` to get the heuristic's modules, hand-edit the
+    # names/boundaries, then re-apply with `--plan`. See references/organize.md.
+    id="${1:?usage: wf.sh organize <workflowId> [--dump-plan] [--plan p.json] [--save out.json]}"
+    shift
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    plan_arg=(); dims_arg=(); dump=0; save=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --plan) plan_arg=(--plan "$2"); shift 2;;
+        --dims) dims_arg=("--dims=$2"); shift 2;;   # real node sizes (dims.json) → exact spacing
+        --dump-plan) dump=1; shift;;
+        --save) save="$2"; shift 2;;
+        *) shift;;
+      esac
+    done
+    full="$(mktemp)"; graph="$(mktemp)"; out="$(mktemp)"; put="$(mktemp)"
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id" \
+      | jq '(.workflow // .data // .)' > "$full"
+    jq '{nodes, edges}' "$full" > "$graph"
+    if ! jq -e '.nodes | type == "array"' "$graph" >/dev/null 2>&1; then
+      echo "✗ organize — could not read nodes/edges from GET $id" >&2
+      exit 1
+    fi
+    if [ "$dump" = 1 ]; then
+      # ${arr[@]+...} guard: empty arrays are safe under `set -u` on bash 3.2
+      python3 "$SCRIPT_DIR/organize.py" "$graph" ${plan_arg[@]+"${plan_arg[@]}"} --dump-plan
+      exit 0
+    fi
+    if ! python3 "$SCRIPT_DIR/organize.py" "$graph" "$out" \
+         ${plan_arg[@]+"${plan_arg[@]}"} ${dims_arg[@]+"${dims_arg[@]}"} >&2; then
+      echo "✗ organize — organize.py failed" >&2
+      exit 1
+    fi
+    [ -n "$save" ] && cp "$out" "$save" && echo "saved organized graph -> $save" >&2
+    # swap only nodes/edges back into the full object so the PUT preserves
+    # name/tags/settings, then graph-lint before writing
+    jq --slurpfile o "$out" '.nodes=$o[0].nodes | .edges=$o[0].edges' "$full" > "$put"
+    if [ -z "${WF_SKIP_CHECK:-}" ] && [ -f "scripts/wf-check.ts" ]; then
+      if ! npx tsx scripts/wf-check.ts "$put" >&2; then
+        echo "✗ organize blocked — graph-lint failed (WF_SKIP_CHECK=1 to override)" >&2
+        exit 1
+      fi
+    fi
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+      -X PUT "$BASE/workflows/$id" --data-binary "@$put"
     ;;
 
   run)
@@ -255,8 +368,32 @@ sys.stdout.write(json.dumps({
     "edges": wf.get("edges", []),
     "targetNodeId": os.environ["NODE_ID"],
 }))')
-    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
-      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body"
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body")
+    code=$(printf '%s' "$resp" | tail -n1)
+    body=$(printf '%s' "$resp" | sed '$d')
+    printf '%s\n' "$body"
+    # Fail loud on non-2xx (incl. a 429 swallowed before this fix → a render
+    # proceeding on the wrong cached voice). A run that didn't start must NOT
+    # read as success.
+    case "$code" in
+      2*) ;;
+      *) echo "✗ run-node FAILED (HTTP $code): execution did NOT start — nothing to poll." >&2; exit 1 ;;
+    esac
+    # Even on 2xx, confirm an execution actually came back (executionRuns[].id),
+    # so a malformed/empty success body fails loud instead of leaving poll blind.
+    printf '%s' "$body" | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.stderr.write("✗ run-node: non-JSON response — execution may not have started.\n"); sys.exit(1)
+runs = d.get("executionRuns") or []
+if not (runs and runs[0].get("id")) and not d.get("executionId"):
+    sys.stderr.write("✗ run-node: success status but no executionId in response — nothing to poll.\n"); sys.exit(1)
+# Loud stale-upstream warning: a PAID upstream node is serving a cached result
+# whose inputs changed since it last ran, so this targeted run built on old data.
+for s in (d.get("staleDependencies") or []):
+    sys.stderr.write("⚠️  STALE upstream: paid node %r served a CACHED result; its inputs changed (%s). Re-run it to refresh.\n" % (s.get("nodeId"), ",".join(s.get("changedKeys", []))))
+' || exit 1
     ;;
 
   run-force)
@@ -273,8 +410,14 @@ sys.stdout.write(json.dumps({
     "edges": wf.get("edges", []),
     "force": True,
 }))')
-    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
-      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body"
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body")
+    code=$(printf '%s' "$resp" | tail -n1)
+    printf '%s\n' "$(printf '%s' "$resp" | sed '$d')"
+    case "$code" in
+      2*) ;;
+      *) echo "✗ run-force FAILED (HTTP $code): execution did NOT start." >&2; exit 1 ;;
+    esac
     ;;
 
   poll)
@@ -314,7 +457,14 @@ sys.stdout.write(json.dumps({
         COMPLETED)
           echo "✓ COMPLETED"
           printf '%s' "$body" | jq -r \
-            '(.nodeStates // []) | map(select(.outputUrl)) | .[] | "  → \(.label // .nodeId): \(.outputUrl)"'
+            '(.nodeStates // []) | .[] |
+               ((.outputUrls // (if .outputUrl then [.outputUrl] else [] end))) as $u |
+               (if ($u | length) > 1
+                  then "  → \(.label // .nodeId) (\($u | length) outputs):", ($u[] | "      \(.)")
+                elif ($u | length) == 1
+                  then "  → \(.label // .nodeId): \($u[0])"
+                else empty end),
+               (if .text then "  ✎ \(.label // .nodeId): \(.text | gsub("\\s+";" ") | .[0:140])\(if (.text|length) > 140 then "…" else "" end)" else empty end)'
           exit 0 ;;
         FAILED)
           echo "✗ FAILED" >&2
@@ -366,9 +516,26 @@ sys.stdout.write(json.dumps({
           -d "$(jq -nc --arg u "$src" '{url:$u}')") ;;
       *)
         [ -f "$src" ] || { echo "file not found: $src" >&2; exit 2; }
+        # Derive the MIME from the extension and send it explicitly — curl -F
+        # otherwise sends application/octet-stream, which some clients can't
+        # recover from. (The server also infers from the extension as a fallback.)
+        case "${src##*.}" in
+          jpg|jpeg) mime=image/jpeg ;;
+          png)      mime=image/png ;;
+          gif)      mime=image/gif ;;
+          webp)     mime=image/webp ;;
+          avif)     mime=image/avif ;;
+          mp4)      mime=video/mp4 ;;
+          webm)     mime=video/webm ;;
+          mov)      mime=video/quicktime ;;
+          mp3)      mime=audio/mpeg ;;
+          wav)      mime=audio/wav ;;
+          m4a)      mime=audio/mp4 ;;
+          *)        mime=application/octet-stream ;;
+        esac
         resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" \
           -X POST "$BASE/media/upload" \
-          -F "file=@$src") ;;
+          -F "file=@$src;type=$mime") ;;
     esac
     # Print just the CDN url (the point of the command). On error, dump the
     # raw JSON to stderr and fail so callers see what went wrong.
