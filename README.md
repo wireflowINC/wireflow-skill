@@ -37,6 +37,11 @@ list and auto-trigger on keywords like "wireflow", "build a workflow",
    ```
 3. Restart your terminal (or `source` the profile).
 
+Key precedence is `WIREFLOW_API_KEY` env var > `--key <key>` flag > a `.env` in
+the current directory. A key read from `./.env` prints a one-line notice so a
+repo's own `.env` can't silently swap identities. For a one-off call:
+`bash scripts/wf.sh --key wf_live_... <verb> ...`.
+
 ## Use
 
 Open Claude in any directory and ask:
@@ -59,7 +64,10 @@ Open Claude in any directory and ask:
 - `references/remotion-templates.md` — how to construct `compose:remotion`
   nodes from template specs
 - `scripts/wf.sh` — single dispatcher for common API operations
-  (templates, create, run, poll, list, credits)
+  (templates, create, run, poll, list, duplicate, credits). Its `check` gate
+  (and the gate inside `create`/`update`/`organize`) graph-lints the workflow
+  even without the repo, via the server's `/workflows/lint` endpoint — so the
+  "no codebase access required" promise holds.
 - `examples/` — working workflow JSONs: text→image, text→video,
   image + audio → Remotion render
 
