@@ -115,8 +115,10 @@ a caller without the wireflow codebase can validate a graph. Body is
 ```
 
 `ok:false` means the graph has violations (block the write). `wf.sh check` uses
-the repo's `wf-check.ts` on-repo and this endpoint off-repo; if the server
-predates this endpoint (404) it warns `UNVERIFIED` and proceeds.
+the repo's `wf-check.ts` on-repo and this endpoint off-repo. If the server
+predates this endpoint (404) or errors: standalone `wf.sh check` fails CLOSED
+(warns `UNVERIFIED`, exit 2), while the gates inside `create`/`update`/
+`organize` warn `UNVERIFIED` and proceed (the write surfaces real errors).
 
 ## Execution
 

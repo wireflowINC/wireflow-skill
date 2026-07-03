@@ -125,10 +125,14 @@ When the user asks you to build or run a Wireflow workflow:
 > the wireflow repo, and otherwise POST the graph to the server's
 > `/workflows/lint` endpoint — so the same caps/cycle/dangling-edge/handle
 > checks hold off-repo, keeping the "no codebase access required" promise.
-> `bash scripts/wf.sh check workflow.json` exits `0` (safe), `1` (violations,
-> printed with fix hints), or `2` (usage/parse). If the server is old and lacks
-> `/workflows/lint`, the gate prints a loud `UNVERIFIED` warning and proceeds
-> (it never silently skips). `WF_SKIP_CHECK=1` bypasses it.
+> `bash scripts/wf.sh check workflow.json` exits `0` (verified clean), `1`
+> (violations, printed with fix hints), or `2` (could NOT verify — server lint
+> unreachable/erroring with no local `wf-check.ts` — or a usage/parse error).
+> Standalone `check` **fails closed**: when it cannot verify, it exits `2`, so
+> a `check && create` chain never treats "unverified" as "safe". The gates
+> inside `create`/`update`/`organize` instead print a loud `UNVERIFIED`
+> warning and proceed (the write itself surfaces real errors there) — visible,
+> never a silent skip. `WF_SKIP_CHECK=1` bypasses all of it.
 
 > **Fork a workflow with `duplicate`.** `bash scripts/wf.sh duplicate <id>
 > [name]` server-side clones a workflow (a template, or a working flow you want

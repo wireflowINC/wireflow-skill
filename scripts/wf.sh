@@ -64,8 +64,10 @@ elif [ -f ".env" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       WIREFLOW_API_KEY=*|WIREFLOW_BASE_URL=*)
-        # Strip surrounding quotes if present
+        # Strip a trailing CR (CRLF .env would yield "Bearer key\r" → silent
+        # 401s), then surrounding quotes if present
         value="${line#*=}"
+        value="${value%$'\r'}"
         value="${value%\"}"
         value="${value#\"}"
         value="${value%\'}"
@@ -138,12 +140,18 @@ wf_curl() {
 #   2. Off-repo: POST the JSON to $BASE/workflows/lint (via wf_curl, so a 429
 #      backs off + retries). ok:false → return 1 (blocks the write); ok:true
 #      with warnings → print them, return 0.
-#   3. Endpoint unreachable / 404 / non-200 (not deployed yet, old server):
-#      print a LOUD warning that the graph is UNVERIFIED, then return 0
-#      (proceed). Same net effect as the old off-repo skip, but visible.
+#   3. Endpoint unreachable / 404 / any other non-200 (not deployed yet, old
+#      server, auth error): print a LOUD warning that the graph is UNVERIFIED,
+#      set WF_LINT_UNVERIFIED=1, and return 0. The create/update/organize
+#      gates proceed on that (visible skip — interactive write paths where the
+#      POST itself surfaces real errors); the standalone `check` verb fails
+#      CLOSED on it (exit 2), so `check && create` chains never read "could
+#      not verify" as "safe".
 # Callers still honor WF_SKIP_CHECK=1 to bypass this entirely.
+WF_LINT_UNVERIFIED=0
 wf_lint() {
   local file="$1"
+  WF_LINT_UNVERIFIED=0
   if [ -f "scripts/wf-check.ts" ]; then
     npx tsx scripts/wf-check.ts "$file" >&2
     return $?
@@ -155,9 +163,9 @@ wf_lint() {
   body=$(printf '%s' "$resp" | sed '$d')
   case "$code" in
     200) ;;
-    404) echo "⚠ /workflows/lint not deployed on this server (404) — graph is UNVERIFIED (proceeding)." >&2; return 0 ;;
-    ''|000) echo "⚠ server-side lint unreachable — graph is UNVERIFIED (proceeding). WF_SKIP_CHECK=1 to silence." >&2; return 0 ;;
-    *) echo "⚠ server-side lint returned HTTP $code — graph is UNVERIFIED (proceeding)." >&2; return 0 ;;
+    404) echo "⚠ /workflows/lint not deployed on this server (404) — graph is UNVERIFIED." >&2; WF_LINT_UNVERIFIED=1; return 0 ;;
+    ''|000) echo "⚠ server-side lint unreachable — graph is UNVERIFIED. WF_SKIP_CHECK=1 to silence." >&2; WF_LINT_UNVERIFIED=1; return 0 ;;
+    *) echo "⚠ server-side lint returned HTTP $code — graph is UNVERIFIED." >&2; WF_LINT_UNVERIFIED=1; return 0 ;;
   esac
   # NOTE: jq's `//` treats `false` as empty, so `.data.ok // .ok` would silently
   # drop a genuine ok:false. Extract with has() to preserve the boolean.
@@ -166,7 +174,8 @@ wf_lint() {
     elif has("ok") then .ok
     else empty end' 2>/dev/null || true)
   if [ -z "$ok" ]; then
-    echo "⚠ server-side lint returned an unrecognized response — graph is UNVERIFIED (proceeding)." >&2
+    echo "⚠ server-side lint returned an unrecognized response — graph is UNVERIFIED." >&2
+    WF_LINT_UNVERIFIED=1
     return 0
   fi
   # Print violations, then warnings, in a wf-check-like style (rule + msg + fix).
@@ -239,9 +248,12 @@ case "$cmd" in
   check)
     # THE GATE — graph-lint a workflow JSON ({nodes,edges}) before create/run:
     # caps + cycle + dangling-edge + the handle-vs-catalog pass (the silent
-    # break the catalog exists to kill). Exit 0 = safe, 1 = violations, 2 =
-    # usage/parse. Uses the repo's wf-check.ts when run from the repo root, else
-    # the server-side /workflows/lint endpoint — so it works WITHOUT the repo.
+    # break the catalog exists to kill). Exit 0 = verified clean, 1 =
+    # violations, 2 = could NOT verify (server lint unreachable/erroring and no
+    # local wf-check.ts) or usage/parse. Standalone check FAILS CLOSED: a
+    # `check && create` chain must never read "could not verify" as "safe".
+    # (The gates inside create/update/organize instead warn UNVERIFIED and
+    # proceed — the write itself surfaces real errors there.)
     file="${1:?usage: wf.sh check <workflow.json>}"
     [ -f "$file" ] || { echo "✗ file not found: $file" >&2; exit 2; }
     if [ -n "${WF_SKIP_CHECK:-}" ]; then
@@ -249,6 +261,10 @@ case "$cmd" in
       exit 0
     fi
     rc=0; wf_lint "$file" || rc=$?
+    if [ "$rc" -eq 0 ] && [ "$WF_LINT_UNVERIFIED" -eq 1 ]; then
+      echo "✗ check could NOT verify the graph (server-side lint unavailable) — failing closed (exit 2)." >&2
+      exit 2
+    fi
     exit "$rc"
     ;;
 
@@ -600,9 +616,15 @@ sys.stdout.write(json.dumps({
       2*)
         new_id=$(printf '%s' "$payload" | jq -r '.data.id // empty' 2>/dev/null || true)
         url=$(printf '%s' "$payload" | jq -r '.data.url // empty' 2>/dev/null || true)
-        [ -n "$new_id" ] && printf 'id:  %s\n' "$new_id"
-        [ -n "$url" ] && printf 'url: %s\n' "$url"
-        if [ -z "$new_id$url" ]; then printf '%s\n' "$payload"; fi
+        # A 2xx without a parseable new id is NOT success — an empty/odd body
+        # printed as a blank line + exit 0 would read as a clone that landed.
+        if [ -z "$new_id" ]; then
+          echo "✗ duplicate returned HTTP $code but no workflow id in the response:" >&2
+          printf '%s\n' "$payload" >&2
+          exit 1
+        fi
+        printf 'id:  %s\n' "$new_id"
+        if [ -n "$url" ]; then printf 'url: %s\n' "$url"; fi
         ;;
       ''|000)
         echo "✗ duplicate failed — could not reach $BASE (connection error)" >&2
