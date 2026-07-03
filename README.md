@@ -64,7 +64,10 @@ Open Claude in any directory and ask:
 - `references/remotion-templates.md` — how to construct `compose:remotion`
   nodes from template specs
 - `scripts/wf.sh` — single dispatcher for common API operations
-  (templates, create, run, poll, list, duplicate, credits). Its `check` gate
+  (templates, create, run, poll, list, duplicate, patch-node, credits).
+  `patch-node <id> <nodeId> '{"config":{"prompt":"new text"}}'` changes one
+  node's config/label/position without round-tripping the whole graph. Its
+  `check` gate
   (and the gate inside `create`/`update`/`organize`) graph-lints the workflow
   even without the repo, via the server's `/workflows/lint` endpoint — so the
   "no codebase access required" promise holds.

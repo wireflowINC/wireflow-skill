@@ -78,6 +78,62 @@ dynamic-port graphs the static gate can't fully verify).
 
 **Scope:** `workflows:write`
 
+### `PATCH /workflows/:id/nodes/:nodeId` (patch ONE node)
+
+**Scope:** `workflows:write`
+
+Update a single node in place without round-tripping the whole graph. At least
+one of `config`, `params`, `label`, `position` is required.
+
+**Body:**
+```json
+{ "config": { "prompt": "new hook text" },
+  "params": { "seed": 42 },
+  "label": "Hook Writer",
+  "position": { "x": 120, "y": 40 },
+  "baseUpdatedAt": "2026-07-02T10:00:00.000Z" }
+```
+
+**Merge semantics:**
+- `config` and `params` merge **shallowly, per key**: keys you send are set,
+  keys you omit are left alone, and a key set to `null` **deletes** it.
+- `label` and `position` **replace** (no merge).
+- The server refreshes derived output for `input:*` nodes and mirrors `config`
+  into `params`, so a one-key patch on a prompt just works (no need to also send
+  `params` or the node's `output`).
+
+**Forbidden fields:** `output`, `result`, `nodeType`, `isExecuting`, and other
+structural keys are rejected with `400 invalid_field` (a single-node patch can't
+restructure the graph, so there is no graph-lint gate on this route).
+
+**Optimistic concurrency:** the server **always** compare-and-swaps the write.
+If a concurrent write landed after yours started, it returns `409`:
+```json
+{ "error": { "type": "conflict_error", "code": "stale_write" },
+  "currentUpdatedAt": "2026-07-02T10:03:00.000Z",
+  "yourBaseUpdatedAt": "2026-07-02T10:00:00.000Z" }
+```
+Passing `baseUpdatedAt` (the `updatedAt` you saw when you loaded the workflow)
+additionally makes the server reject the patch if the workflow changed since
+**you** loaded it, not just during the write window. On a `409`, re-`GET` the
+workflow, reapply your edit, and patch again. Nothing was clobbered.
+
+**Response:** `200`
+```json
+{ "data": { "node": { "id": "node_abc", "data": { "label": "Hook Writer" } },
+            "updatedAt": "2026-07-02T10:05:00.000Z" } }
+```
+
+Other errors: `404` (node or workflow not found), `403` (wrong owner / missing
+scope), `413` (body over the 256KB cap).
+
+`bash scripts/wf.sh patch-node <flowId> <nodeId> '<json-body>'` does this for
+you: it validates the JSON locally (exit 2 on bad input, no network call),
+injects the current `updatedAt` as `baseUpdatedAt` (skip with
+`WF_SKIP_CONCURRENCY=1` or by supplying your own), prints the patched node id +
+label + new `updatedAt` on success, and fails loud on `409`/`400`/other (exit
+1).
+
 ### `DELETE /workflows/:id`
 
 **Scope:** `workflows:write`

@@ -12,12 +12,12 @@ when_to_use: >
   codebase itself, or generic AI image/video requests that don't mention
   Wireflow or its concepts (templates, compose nodes, workflows).
 user-invokable: true
-argument-hint: "[templates | blocks | nodes | upload <file> | check <json> | run <id> | duplicate <id> | generate \"<prompt>\"]"
+argument-hint: "[templates | blocks | nodes | upload <file> | check <json> | run <id> | patch-node <id> <nodeId> <json> | duplicate <id> | generate \"<prompt>\"]"
 license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 # Wireflow Skill
@@ -139,6 +139,23 @@ When the user asks you to build or run a Wireflow workflow:
 > to branch) into a NEW one you own, and prints the new `id` + `url` plainly for
 > scripting. Optional `name` overrides the copy's name. Use this instead of
 > re-authoring a graph from scratch when you're iterating on an existing one.
+
+> **Change one node without round-tripping the graph with `patch-node`.**
+> `bash scripts/wf.sh patch-node <flowId> <nodeId> '{"config":{"prompt":"new
+> text"}}'` patches a single node in place. The body is raw JSON with any of
+> `config`, `params`, `label`, `position` (at least one). `config`/`params`
+> merge shallowly per key (a key set to `null` deletes it); `label`/`position`
+> replace. Use it to change one prompt, tweak a model setting, or rename a node
+> without fetching the whole workflow, editing the JSON, and PUTting it back.
+> It carries the same optimistic concurrency as `update` (it injects the
+> workflow's current `updatedAt` as `baseUpdatedAt`, so a racing save gets a
+> `409` instead of a silent clobber; the server also compare-and-swaps on every
+> write), and it prints the patched node id, its label, and the new
+> `updatedAt`. There is no graph-lint gate here (a single-node config patch
+> can't break topology, and the server rejects structural fields like
+> `output`/`nodeType` with a `400`). The server refreshes derived output for
+> `input:*` nodes and mirrors `config` into `params`, so a one-key prompt patch
+> just works.
 
 ## Using your own assets (upload)
 

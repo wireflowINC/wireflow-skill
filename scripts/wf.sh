@@ -11,6 +11,7 @@
 #   wf.sh check <workflow.json>          # GATE: graph-lint (caps+cycle+handles); repo OR server-side
 #   wf.sh create <workflow.json>         # create (gated on check; auto-layout)
 #   wf.sh update <workflowId> <wf.json>  # replace (gated on check; auto-layout)
+#   wf.sh patch-node <flowId> <nodeId> <json>  # patch ONE node's config/params/label/position (no full round-trip)
 #   wf.sh layout <workflow.json> [out]   # re-space nodes (no overlap), no API call
 #   wf.sh organize <workflowId>          # refactor live graph: DRY constants + module groups + swimlanes (--dump-plan / --plan p.json)
 #   wf.sh run <workflowId> <inputs.json> # run a workflow with inputs (re-runs ALL nodes)
@@ -369,6 +370,91 @@ json.dump(d, open(sys.argv[2],"w"))' "$send" "$merged" && send="$merged"
     case "$code" in
       2*) ;;
       *) echo "✗ update FAILED (HTTP $code): write did NOT land — fix the error above before running anything downstream." >&2; exit 1 ;;
+    esac
+    ;;
+
+  patch-node)
+    # Patch ONE node without round-tripping the whole graph.
+    # PATCH /workflows/:id/nodes/:nodeId — body is raw JSON with any of
+    # { config, params, label, position } (at least one required). Merge
+    # semantics: shallow per-field merge for config/params (a key set to null
+    # DELETES it); label/position replace. The server rejects structural fields
+    # (output/result/nodeType/isExecuting → 400 invalid_field), refreshes
+    # derived output for input:* nodes, and mirrors config→params, so a one-key
+    # prompt patch just works. No graph-lint gate: a single-node config patch
+    # can't break topology.
+    #   wf.sh patch-node <flowId> <nodeId> '{"config":{"prompt":"new text"}}'
+    #
+    # Optimistic concurrency: mirrors `update` — GET the workflow's current
+    # updatedAt and inject it as baseUpdatedAt so a racing save is REJECTED
+    # (409), not clobbered. Skipped if the caller already put baseUpdatedAt in
+    # the body, or WF_SKIP_CONCURRENCY=1. (The server ALSO compare-and-swaps on
+    # every write, so a concurrent write still 409s regardless.)
+    id="${1:?usage: wf.sh patch-node <flowId> <nodeId> <json-body>}"
+    node_id="${2:?usage: wf.sh patch-node <flowId> <nodeId> <json-body>}"
+    json="${3:-}"
+    # Validate the body is present + valid JSON BEFORE any network call
+    # (missing/bad local input → usage, exit 2).
+    if [ -z "$json" ] || ! printf '%s' "$json" | jq -e . >/dev/null 2>&1; then
+      echo "✗ patch-node: missing or invalid JSON body: ${json:-<empty>}" >&2
+      echo "usage: wf.sh patch-node <flowId> <nodeId> '{\"config\":{\"prompt\":\"...\"}}'" >&2
+      exit 2
+    fi
+    body="$json"
+    has_base=$(printf '%s' "$json" | jq -r 'has("baseUpdatedAt")' 2>/dev/null || echo false)
+    if [ -z "${WF_SKIP_CONCURRENCY:-}" ] && [ "$has_base" != "true" ]; then
+      base_ts=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id" \
+        | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print(""); raise SystemExit
+print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
+      if [ -n "$base_ts" ]; then
+        body=$(printf '%s' "$json" | jq -c --arg t "$base_ts" '. + {baseUpdatedAt:$t}')
+      fi
+    fi
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+      -X PATCH "$BASE/workflows/$id/nodes/$node_id" --data-binary "$body")
+    code=$(printf '%s' "$resp" | tail -n1)
+    payload=$(printf '%s' "$resp" | sed '$d')
+    case "$code" in
+      2*)
+        # A 2xx without a parseable node is NOT success (same hardening as
+        # duplicate) — print the raw body and fail loud.
+        patched=$(printf '%s' "$payload" | jq -r '.data.node.id // empty' 2>/dev/null || true)
+        if [ -z "$patched" ]; then
+          echo "✗ patch-node returned HTTP $code but no node in the response:" >&2
+          printf '%s\n' "$payload" >&2
+          exit 1
+        fi
+        label=$(printf '%s' "$payload" | jq -r '.data.node.data.label // .data.node.label // empty' 2>/dev/null || true)
+        new_ts=$(printf '%s' "$payload" | jq -r '.data.updatedAt // empty' 2>/dev/null || true)
+        printf 'patched node: %s\n' "$patched"
+        [ -n "$label" ] && printf 'label:        %s\n' "$label"
+        [ -n "$new_ts" ] && printf 'updatedAt:    %s\n' "$new_ts"
+        # explicit success: the [ -n ] && printf guards above leak exit 1 under
+        # set -e when a field is absent (the PR #2 footgun) — never let an
+        # empty label/updatedAt turn a landed patch into a failed exit code.
+        exit 0
+        ;;
+      409)
+        # Concurrent write raced yours (or your baseUpdatedAt was stale). The
+        # patch did NOT land — re-GET and retry so you don't clobber their save.
+        current=$(printf '%s' "$payload" | jq -r '.currentUpdatedAt // empty' 2>/dev/null || true)
+        yours=$(printf '%s' "$payload" | jq -r '.yourBaseUpdatedAt // empty' 2>/dev/null || true)
+        echo "✗ CONFLICT (409): the workflow changed since you loaded it — another session/agent saved. Your patch was NOT applied (no clobber)." >&2
+        [ -n "$current" ] && echo "  current updatedAt:  $current" >&2
+        [ -n "$yours" ]   && echo "  your baseUpdatedAt: $yours" >&2
+        echo "  Re-fetch with 'wf.sh get $id', reapply your edit, and patch-node again." >&2
+        exit 1
+        ;;
+      ''|000)
+        echo "✗ patch-node failed — could not reach $BASE (connection error)" >&2
+        exit 1 ;;
+      *)
+        # 400 invalid_field / 404 / 403 / 413 — print the server's message verbatim.
+        echo "✗ patch-node failed (HTTP $code)" >&2
+        printf '%s\n' "$payload" >&2
+        exit 1 ;;
     esac
     ;;
 
@@ -742,7 +828,7 @@ sys.stdout.write(json.dumps({
     ;;
 
   ""|-h|--help|help)
-    sed -n '2,39p' "$0"
+    sed -n '2,40p' "$0"
     ;;
 
   *)
