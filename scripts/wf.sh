@@ -8,7 +8,7 @@
 #   wf.sh blocks [--use <tag>]           # motion-graphics block library (filter by purpose: endcard, captions, intro…)
 #   wf.sh block <blockId>                # one block: full prop schema + defaults + tags
 #   wf.sh generate "<prompt>"            # AI-generate a workflow from a prompt
-#   wf.sh check <workflow.json>          # GATE: graph-lint (caps+cycle+handles)
+#   wf.sh check <workflow.json>          # GATE: graph-lint (caps+cycle+handles); repo OR server-side
 #   wf.sh create <workflow.json>         # create (gated on check; auto-layout)
 #   wf.sh update <workflowId> <wf.json>  # replace (gated on check; auto-layout)
 #   wf.sh layout <workflow.json> [out]   # re-space nodes (no overlap), no API call
@@ -20,6 +20,7 @@
 #   wf.sh wait <executionId>             # BLOCK until done; per-node status + errors (rate-aware)
 #   wf.sh list                           # list workflows
 #   wf.sh get <workflowId>               # fetch one workflow
+#   wf.sh duplicate <flowId> [name]      # server-side clone → prints new id + url
 #   wf.sh delete <workflowId>            # delete a workflow (clean up test/double-created flows)
 #   wf.sh inputs <workflowId>            # show valid input keys for /run
 #   wf.sh upload <file|url>              # host a local file/remote url → prints CDN url
@@ -28,22 +29,45 @@
 #   wf.sh download <url> [out]           # pull a render output (bypasses CDN 403)
 #   wf.sh credits                        # show remaining credits
 #
+# Global flags (before the verb):
+#   --key <key>        # supply the API key inline for one call
+#
 # Env:
-#   WIREFLOW_API_KEY   (required — or place it in a .env file in cwd)
+#   WIREFLOW_API_KEY   (required). Precedence: WIREFLOW_API_KEY env var >
+#                      --key flag > a .env in the cwd. A key read from ./.env
+#                      prints a one-line stderr notice so identity swaps show.
 #   WIREFLOW_BASE_URL  (optional, default https://www.wireflow.ai/api/v1)
 
 set -euo pipefail
 
-# Auto-load WIREFLOW_* vars from a .env file in the current directory if
-# the key isn't already set in the environment. Keeps repo-scoped keys
-# working without asking users to `source .env` manually every session.
-# Only pulls WIREFLOW_ prefixed lines so we don't blow away other env.
-if [ -z "${WIREFLOW_API_KEY:-}" ] && [ -f ".env" ]; then
+# Global flags parsed BEFORE the verb — e.g. `wf.sh --key wf_live_... duplicate <id>`.
+KEY_FLAG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --key) KEY_FLAG="${2:?--key needs a value}"; shift 2 ;;
+    --key=*) KEY_FLAG="${1#--key=}"; shift ;;
+    *) break ;;
+  esac
+done
+
+# Key precedence: explicit WIREFLOW_API_KEY env var > --key flag > cwd .env.
+# The env var and --key are trusted silently. A cwd .env is the footgun: run
+# from a repo that ships its own .env and it would silently swap identities, so
+# we only fall back to .env when neither the env var nor --key is given, AND we
+# print one stderr notice naming the file so the swap is visible.
+if [ -n "${WIREFLOW_API_KEY:-}" ]; then
+  : # trust the environment as-is
+elif [ -n "$KEY_FLAG" ]; then
+  export WIREFLOW_API_KEY="$KEY_FLAG"
+elif [ -f ".env" ]; then
+  # Only pull WIREFLOW_ prefixed lines so we don't blow away other env.
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       WIREFLOW_API_KEY=*|WIREFLOW_BASE_URL=*)
-        # Strip surrounding quotes if present
+        # Strip a trailing CR (CRLF .env would yield "Bearer key\r" → silent
+        # 401s), then surrounding quotes if present
         value="${line#*=}"
+        value="${value%$'\r'}"
         value="${value%\"}"
         value="${value#\"}"
         value="${value%\'}"
@@ -52,6 +76,9 @@ if [ -z "${WIREFLOW_API_KEY:-}" ] && [ -f ".env" ]; then
         ;;
     esac
   done < .env
+  if [ -n "${WIREFLOW_API_KEY:-}" ]; then
+    printf '→ using WIREFLOW_API_KEY from ./.env\n' >&2
+  fi
 fi
 
 BASE="${WIREFLOW_BASE_URL:-https://www.wireflow.ai/api/v1}"
@@ -60,11 +87,15 @@ if [ -z "${WIREFLOW_API_KEY:-}" ]; then
   cat >&2 <<EOF
 error: WIREFLOW_API_KEY is not set.
 
+Precedence: WIREFLOW_API_KEY env var > --key flag > a .env in the cwd.
 Options:
   1. Create one at https://www.wireflow.ai/settings?tab=api-keys&section=api-keys
   2. Add it to your shell profile (~/.zshrc or ~/.bashrc):
        export WIREFLOW_API_KEY="wf_live_..."
-  3. Or put it in a .env file in the directory you run wf.sh from:
+  3. Pass it inline for one call:
+       wf.sh --key wf_live_... <verb> ...
+  4. Or put it in a .env file in the directory you run wf.sh from (a
+     one-line notice tells you when a key is read from ./.env):
        WIREFLOW_API_KEY=wf_live_...
 
 EOF
@@ -100,6 +131,69 @@ wf_curl() {
     printf '%s' "$resp"
     return 0
   done
+}
+
+# wf_lint <file> — graph-lint a workflow JSON before create/update/organize/
+# check, whether or not the wireflow repo is present. Writes findings to stderr.
+#   1. On-repo (scripts/wf-check.ts in cwd): use it verbatim — zero behavior
+#      change for repo devs (its own exit code is returned: 0/1/2).
+#   2. Off-repo: POST the JSON to $BASE/workflows/lint (via wf_curl, so a 429
+#      backs off + retries). ok:false → return 1 (blocks the write); ok:true
+#      with warnings → print them, return 0.
+#   3. Endpoint unreachable / 404 / any other non-200 (not deployed yet, old
+#      server, auth error): print a LOUD warning that the graph is UNVERIFIED,
+#      set WF_LINT_UNVERIFIED=1, and return 0. The create/update/organize
+#      gates proceed on that (visible skip — interactive write paths where the
+#      POST itself surfaces real errors); the standalone `check` verb fails
+#      CLOSED on it (exit 2), so `check && create` chains never read "could
+#      not verify" as "safe".
+# Callers still honor WF_SKIP_CHECK=1 to bypass this entirely.
+WF_LINT_UNVERIFIED=0
+wf_lint() {
+  local file="$1"
+  WF_LINT_UNVERIFIED=0
+  if [ -f "scripts/wf-check.ts" ]; then
+    npx tsx scripts/wf-check.ts "$file" >&2
+    return $?
+  fi
+  local resp code body ok
+  resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+    -X POST "$BASE/workflows/lint" --data-binary "@$file") || true
+  code=$(printf '%s' "$resp" | tail -n1)
+  body=$(printf '%s' "$resp" | sed '$d')
+  case "$code" in
+    200) ;;
+    404) echo "⚠ /workflows/lint not deployed on this server (404) — graph is UNVERIFIED." >&2; WF_LINT_UNVERIFIED=1; return 0 ;;
+    ''|000) echo "⚠ server-side lint unreachable — graph is UNVERIFIED. WF_SKIP_CHECK=1 to silence." >&2; WF_LINT_UNVERIFIED=1; return 0 ;;
+    *) echo "⚠ server-side lint returned HTTP $code — graph is UNVERIFIED." >&2; WF_LINT_UNVERIFIED=1; return 0 ;;
+  esac
+  # NOTE: jq's `//` treats `false` as empty, so `.data.ok // .ok` would silently
+  # drop a genuine ok:false. Extract with has() to preserve the boolean.
+  ok=$(printf '%s' "$body" | jq -r '
+    if (.data | type) == "object" and (.data | has("ok")) then .data.ok
+    elif has("ok") then .ok
+    else empty end' 2>/dev/null || true)
+  if [ -z "$ok" ]; then
+    echo "⚠ server-side lint returned an unrecognized response — graph is UNVERIFIED." >&2
+    WF_LINT_UNVERIFIED=1
+    return 0
+  fi
+  # Print violations, then warnings, in a wf-check-like style (rule + msg + fix).
+  printf '%s' "$body" | jq -r '
+    (.data.violations // .violations // [])[]
+    | if type=="string" then "✗ " + .
+      else "✗ \(.rule // "error"): \(.message // "")"
+        + (if .nodeId then "  [node \(.nodeId)]" else "" end)
+        + (if .fix then "\n  ↳ fix: \(.fix)" else "" end)
+      end' >&2 2>/dev/null || true
+  printf '%s' "$body" | jq -r '
+    (.data.warnings // .warnings // [])[]
+    | if type=="string" then "⚠ " + .
+      else "⚠ \(.rule // "warning"): \(.message // "")"
+        + (if .fix then "\n  ↳ fix: \(.fix)" else "" end)
+      end' >&2 2>/dev/null || true
+  [ "$ok" = "true" ] && return 0
+  return 1
 }
 
 cmd="${1:-}"
@@ -154,15 +248,24 @@ case "$cmd" in
   check)
     # THE GATE — graph-lint a workflow JSON ({nodes,edges}) before create/run:
     # caps + cycle + dangling-edge + the handle-vs-catalog pass (the silent
-    # break the catalog exists to kill). Exit 0 = safe, 1 = errors (with fixes).
-    # Uses the ONE graph-lint source in the repo (no drift); run from repo root.
+    # break the catalog exists to kill). Exit 0 = verified clean, 1 =
+    # violations, 2 = could NOT verify (server lint unreachable/erroring and no
+    # local wf-check.ts) or usage/parse. Standalone check FAILS CLOSED: a
+    # `check && create` chain must never read "could not verify" as "safe".
+    # (The gates inside create/update/organize instead warn UNVERIFIED and
+    # proceed — the write itself surfaces real errors there.)
     file="${1:?usage: wf.sh check <workflow.json>}"
-    if [ -f "scripts/wf-check.ts" ]; then
-      npx tsx scripts/wf-check.ts "$file"
-    else
-      echo "wf check needs the wireflow repo (run from the repo root)" >&2
+    [ -f "$file" ] || { echo "✗ file not found: $file" >&2; exit 2; }
+    if [ -n "${WF_SKIP_CHECK:-}" ]; then
+      echo "⚠ WF_SKIP_CHECK=1 — lint skipped" >&2
+      exit 0
+    fi
+    rc=0; wf_lint "$file" || rc=$?
+    if [ "$rc" -eq 0 ] && [ "$WF_LINT_UNVERIFIED" -eq 1 ]; then
+      echo "✗ check could NOT verify the graph (server-side lint unavailable) — failing closed (exit 2)." >&2
       exit 2
     fi
+    exit "$rc"
     ;;
 
   see)
@@ -187,11 +290,12 @@ case "$cmd" in
 
   create)
     file="${1:?usage: wf.sh create <workflow.json>}"
-    # GATE: never POST a graph that fails graph-lint. Set WF_SKIP_CHECK=1 to
-    # override (e.g. authoring a dynamic-port-heavy graph the static gate
-    # can't fully verify). Run from the repo root so wf-check.ts is found.
-    if [ -z "${WF_SKIP_CHECK:-}" ] && [ -f "scripts/wf-check.ts" ]; then
-      if ! npx tsx scripts/wf-check.ts "$file" >&2; then
+    # GATE: never POST a graph that fails graph-lint. Uses the repo's
+    # wf-check.ts on-repo, else the server /workflows/lint endpoint — so the
+    # gate holds even without codebase access. Set WF_SKIP_CHECK=1 to override
+    # (e.g. authoring a dynamic-port-heavy graph the static gate can't verify).
+    if [ -z "${WF_SKIP_CHECK:-}" ]; then
+      if ! wf_lint "$file"; then
         echo "✗ create blocked — fix the errors above (or WF_SKIP_CHECK=1 to override)" >&2
         exit 1
       fi
@@ -215,11 +319,12 @@ case "$cmd" in
   update)
     id="${1:?usage: wf.sh update <workflowId> <workflow.json>}"
     file="${2:?usage: wf.sh update <workflowId> <workflow.json>}"
-    # Same gates as create: never PUT a graph that fails graph-lint, and
-    # re-layout before sending — edited graphs (added/removed nodes) are the
-    # main source of overlapping "vibe-coded" canvases.
-    if [ -z "${WF_SKIP_CHECK:-}" ] && [ -f "scripts/wf-check.ts" ]; then
-      if ! npx tsx scripts/wf-check.ts "$file" >&2; then
+    # Same gates as create: never PUT a graph that fails graph-lint (repo
+    # wf-check.ts or the server /workflows/lint endpoint), and re-layout before
+    # sending — edited graphs (added/removed nodes) are the main source of
+    # overlapping "vibe-coded" canvases.
+    if [ -z "${WF_SKIP_CHECK:-}" ]; then
+      if ! wf_lint "$file"; then
         echo "✗ update blocked — fix the errors above (or WF_SKIP_CHECK=1 to override)" >&2
         exit 1
       fi
@@ -321,8 +426,10 @@ json.dump(d, open(sys.argv[2],"w"))' "$send" "$merged" && send="$merged"
     # swap only nodes/edges back into the full object so the PUT preserves
     # name/tags/settings, then graph-lint before writing
     jq --slurpfile o "$out" '.nodes=$o[0].nodes | .edges=$o[0].edges' "$full" > "$put"
-    if [ -z "${WF_SKIP_CHECK:-}" ] && [ -f "scripts/wf-check.ts" ]; then
-      if ! npx tsx scripts/wf-check.ts "$put" >&2; then
+    # Same gate as create/update: repo wf-check.ts on-repo, else server-side
+    # /workflows/lint — so organize's apply step is gated without the repo too.
+    if [ -z "${WF_SKIP_CHECK:-}" ]; then
+      if ! wf_lint "$put"; then
         echo "✗ organize blocked — graph-lint failed (WF_SKIP_CHECK=1 to override)" >&2
         exit 1
       fi
@@ -488,6 +595,47 @@ sys.stdout.write(json.dumps({
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$id"
     ;;
 
+  duplicate)
+    # Server-side clone of a workflow → a NEW workflow you own. Optional name
+    # overrides the copy's name (default: the server picks one). Prints the new
+    # id + url plainly so callers can parse them. Goes through wf_curl so a 429
+    # backs off; any non-2xx fails LOUD (exit 1) — a swallowed clone that reads
+    # as success is the write footgun this repo guards against.
+    id="${1:?usage: wf.sh duplicate <workflowId> [name]}"
+    name="${2:-}"
+    if [ -n "$name" ]; then
+      body="$(jq -nc --arg n "$name" '{name:$n}')"
+    else
+      body='{}'
+    fi
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+      -X POST "$BASE/workflows/$id/duplicate" --data-binary "$body") || true
+    code=$(printf '%s' "$resp" | tail -n1)
+    payload=$(printf '%s' "$resp" | sed '$d')
+    case "$code" in
+      2*)
+        new_id=$(printf '%s' "$payload" | jq -r '.data.id // empty' 2>/dev/null || true)
+        url=$(printf '%s' "$payload" | jq -r '.data.url // empty' 2>/dev/null || true)
+        # A 2xx without a parseable new id is NOT success — an empty/odd body
+        # printed as a blank line + exit 0 would read as a clone that landed.
+        if [ -z "$new_id" ]; then
+          echo "✗ duplicate returned HTTP $code but no workflow id in the response:" >&2
+          printf '%s\n' "$payload" >&2
+          exit 1
+        fi
+        printf 'id:  %s\n' "$new_id"
+        if [ -n "$url" ]; then printf 'url: %s\n' "$url"; fi
+        ;;
+      ''|000)
+        echo "✗ duplicate failed — could not reach $BASE (connection error)" >&2
+        exit 1 ;;
+      *)
+        echo "✗ duplicate failed (HTTP $code)" >&2
+        printf '%s\n' "$payload" >&2
+        exit 1 ;;
+    esac
+    ;;
+
   delete)
     # Delete a workflow (cleans up double-creates / throwaway test flows so they
     # don't pile up). Scope: workflows:write. Irreversible — deletes only the
@@ -594,7 +742,7 @@ sys.stdout.write(json.dumps({
     ;;
 
   ""|-h|--help|help)
-    sed -n '2,25p' "$0"
+    sed -n '2,39p' "$0"
     ;;
 
   *)

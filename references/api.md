@@ -82,6 +82,44 @@ dynamic-port graphs the static gate can't fully verify).
 
 **Scope:** `workflows:write`
 
+### `POST /workflows/:id/duplicate` — clone a workflow
+
+**Scope:** `workflows:write`
+
+Server-side clones a workflow (a template or an existing flow) into a NEW one
+you own. Body is optional; pass `{ "name": "..." }` to override the copy's name.
+
+**Response:** `201`
+```json
+{ "data": { "id": "cmnxw...", "name": "My Workflow (copy)",
+            "url": "https://www.wireflow.ai/workflows/cmnxw..." } }
+```
+
+`bash scripts/wf.sh duplicate <id> [name]` prints the new `id` + `url`; non-2xx
+fails loud (exit 1).
+
+### `POST /workflows/lint` — graph-lint without the repo
+
+**Scope:** `workflows:read`
+
+Runs the SAME graph-lint gate as create/update, but as a standalone endpoint so
+a caller without the wireflow codebase can validate a graph. Body is
+`{ nodes, edges }` or a full workflow object.
+
+**Response:** `200`
+```json
+{ "data": { "ok": true,
+            "violations": [ { "rule": "bad-target-handle", "message": "...",
+                              "fix": "Did you mean \"in-hook\"?", "nodeId": "..." } ],
+            "warnings": [ ... ] } }
+```
+
+`ok:false` means the graph has violations (block the write). `wf.sh check` uses
+the repo's `wf-check.ts` on-repo and this endpoint off-repo. If the server
+predates this endpoint (404) or errors: standalone `wf.sh check` fails CLOSED
+(warns `UNVERIFIED`, exit 2), while the gates inside `create`/`update`/
+`organize` warn `UNVERIFIED` and proceed (the write surfaces real errors).
+
 ## Execution
 
 ### `POST /workflows/:id/run` — run with inputs

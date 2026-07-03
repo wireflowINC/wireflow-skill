@@ -12,12 +12,12 @@ when_to_use: >
   codebase itself, or generic AI image/video requests that don't mention
   Wireflow or its concepts (templates, compose nodes, workflows).
 user-invokable: true
-argument-hint: "[templates | blocks | nodes | upload <file> | check <json> | run <id> | generate \"<prompt>\"]"
+argument-hint: "[templates | blocks | nodes | upload <file> | check <json> | run <id> | duplicate <id> | generate \"<prompt>\"]"
 license: MIT
 allowed-tools: Read, Bash, Write, WebFetch
 metadata:
   category: creative-automation
-  version: "0.9.0"
+  version: "0.10.0"
 ---
 
 # Wireflow Skill
@@ -59,6 +59,12 @@ key. No Wireflow codebase access required.
    ```bash
    export WIREFLOW_BASE_URL="https://www.wireflow.ai/api/v1"   # default
    ```
+
+**Key precedence:** `WIREFLOW_API_KEY` env var > `--key <key>` flag > a `.env`
+in the cwd. The env var and the flag are trusted silently; a key read from
+`./.env` prints one stderr notice (`→ using WIREFLOW_API_KEY from ./.env`) so a
+repo's own `.env` can't silently swap identities on you. Pass a key inline for
+one call with `bash scripts/wf.sh --key wf_live_... <verb> ...`.
 
 ## Core loop
 
@@ -113,6 +119,26 @@ When the user asks you to build or run a Wireflow workflow:
 > for back-compat. **`text`** carries generated copy (LLM output, extractors) so
 > non-media outputs are reachable via the API too. A `429` means you hit the
 > rate limit (~10/min) — slow down; `wf.sh wait` already paces itself.
+
+> **The graph-lint gate works WITHOUT the repo.** `check`, and the gate baked
+> into `create`/`update`/`organize`, run the repo's `wf-check.ts` when you're on
+> the wireflow repo, and otherwise POST the graph to the server's
+> `/workflows/lint` endpoint — so the same caps/cycle/dangling-edge/handle
+> checks hold off-repo, keeping the "no codebase access required" promise.
+> `bash scripts/wf.sh check workflow.json` exits `0` (verified clean), `1`
+> (violations, printed with fix hints), or `2` (could NOT verify — server lint
+> unreachable/erroring with no local `wf-check.ts` — or a usage/parse error).
+> Standalone `check` **fails closed**: when it cannot verify, it exits `2`, so
+> a `check && create` chain never treats "unverified" as "safe". The gates
+> inside `create`/`update`/`organize` instead print a loud `UNVERIFIED`
+> warning and proceed (the write itself surfaces real errors there) — visible,
+> never a silent skip. `WF_SKIP_CHECK=1` bypasses all of it.
+
+> **Fork a workflow with `duplicate`.** `bash scripts/wf.sh duplicate <id>
+> [name]` server-side clones a workflow (a template, or a working flow you want
+> to branch) into a NEW one you own, and prints the new `id` + `url` plainly for
+> scripting. Optional `name` overrides the copy's name. Use this instead of
+> re-authoring a graph from scratch when you're iterating on an existing one.
 
 ## Using your own assets (upload)
 
