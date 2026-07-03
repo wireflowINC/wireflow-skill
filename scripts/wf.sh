@@ -431,6 +431,10 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
         printf 'patched node: %s\n' "$patched"
         [ -n "$label" ] && printf 'label:        %s\n' "$label"
         [ -n "$new_ts" ] && printf 'updatedAt:    %s\n' "$new_ts"
+        # explicit success: the [ -n ] && printf guards above leak exit 1 under
+        # set -e when a field is absent (the PR #2 footgun) — never let an
+        # empty label/updatedAt turn a landed patch into a failed exit code.
+        exit 0
         ;;
       409)
         # Concurrent write raced yours (or your baseUpdatedAt was stale). The
