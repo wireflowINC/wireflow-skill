@@ -82,6 +82,17 @@ elif [ -f ".env" ]; then
   fi
 fi
 
+# ── Never consume the CALLER's stdin ────────────────────────────────────────
+# wf.sh is frequently called from inside a `while read -r line; do wf.sh …; done`
+# loop. Several sub-invocations (curl, and the python/tsx helpers) inherit the
+# script's stdin; if any of them reads it, they drain the loop's input and the
+# loop terminates after ONE iteration (the dogfood footgun). No wf.sh verb reads
+# stdin (inputs come from file-path or inline-JSON args, and the .env read above
+# already uses an explicit `< .env`), so we detach stdin for everything that
+# follows. Equivalent to putting `< /dev/null` on every curl/python/node call,
+# but impossible to forget on a new one.
+exec </dev/null
+
 BASE="${WIREFLOW_BASE_URL:-https://www.wireflow.ai/api/v1}"
 
 if [ -z "${WIREFLOW_API_KEY:-}" ]; then
@@ -642,15 +653,22 @@ sys.stdout.write(json.dumps({
       if [ "$code" != "200" ]; then
         echo "✗ poll HTTP $code: $body" >&2; exit 1
       fi
-      status=$(printf '%s' "$body" | jq -r '.status // "UNKNOWN"')
+      # Shape-robust status read. The executions/<id>/poll endpoint returns a
+      # top-level UPPERCASE `.status` for BOTH full-run and run-node (single-node)
+      # executions. But the /run and /execute endpoints wrap their status under
+      # `.data.status` in lowercase ("running"/"completed") — so if a caller ever
+      # feeds `wait` one of those (or the server shape shifts), read either place
+      # and normalize the case, or the loop would never see COMPLETED and hang.
+      status=$(printf '%s' "$body" | jq -r \
+        '((.status // .data.status) // "UNKNOWN") | ascii_upcase')
       printf '[%s] ' "$status"
       printf '%s\n' "$body" | jq -r \
-        '(.nodeStates // []) | map("\(.label // .nodeId):\(.status)") | join("  ")'
+        '((.nodeStates // .data.nodeStates) // []) | map("\(.label // .nodeId):\(.status)") | join("  ")'
       case "$status" in
         COMPLETED)
           echo "✓ COMPLETED"
           printf '%s' "$body" | jq -r \
-            '(.nodeStates // []) | .[] |
+            '((.nodeStates // .data.nodeStates) // []) | .[] |
                ((.outputUrls // (if .outputUrl then [.outputUrl] else [] end))) as $u |
                (if ($u | length) > 1
                   then "  → \(.label // .nodeId) (\($u | length) outputs):", ($u[] | "      \(.)")
@@ -662,8 +680,8 @@ sys.stdout.write(json.dumps({
         FAILED)
           echo "✗ FAILED" >&2
           printf '%s' "$body" | jq -r \
-            '(.nodeStates // []) | map(select(.status=="FAILED")) | .[] | "  ✗ \(.label // .nodeId): \(.error // "no error detail")"' >&2
-          printf '%s' "$body" | jq -r '.error // empty' >&2
+            '((.nodeStates // .data.nodeStates) // []) | map(select(.status=="FAILED")) | .[] | "  ✗ \(.label // .nodeId): \(.error // "no error detail")"' >&2
+          printf '%s' "$body" | jq -r '(.error // .data.error) // empty' >&2
           exit 1 ;;
       esac
       sleep "$interval"; tick=$((tick + 1))
