@@ -602,6 +602,10 @@ Read these on demand when composing workflows:
 - `references/api.md` — full REST API surface with curl examples
 - `references/remotion-templates.md` — how to construct a `video:remotion`
   node from a template spec
+- `references/video-assembly.md` — **READ BEFORE combining clips**: which node
+  puts videos on screen simultaneously (`split`/`composite` scenes vs
+  `process:video_composite` vs compv3), the mistakes that look like missing
+  features, and the ~$0 still-frame preview endpoint to verify before rendering
 - `references/blocks.md` — discover + compose motion-graphics Blocks
   (`wf.sh blocks`, the `{type:'block',...}` scene shape)
 - `references/diagnostics.md` — the `diagnostics` feedback protocol: codes,

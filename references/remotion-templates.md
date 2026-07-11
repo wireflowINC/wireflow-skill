@@ -9,6 +9,11 @@ via the API — those are code-level compositions that live in the
 wireflow repo and ship through a CI deploy pipeline. The skill can only
 **configure** existing templates.
 
+> Combining multiple clips on screen at once (side-by-side, PiP, overlays)?
+> That is sceneGraph mode, not templates — read `references/video-assembly.md`
+> first. It also covers the ~$0 still-frame preview endpoint for verifying a
+> composition before a paid render.
+
 ## Discovery
 
 ```bash
