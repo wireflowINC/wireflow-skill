@@ -70,9 +70,38 @@ LOOK at the frames. Fix every `issues` entry. Only then run the workflow.
 Never conclude "the platform cannot do X" from a failed render without
 checking `issues` and this document first.
 
-## Coming: timeline tracks
+## Timeline tracks (LIVE)
 
-A `tracks` model (clips at absolute frame positions on stacked tracks, with
-x/y/scale, trim, and playbackRate, like a conventional editor timeline) is
-landing in `video:remotion`. When available it appears in this document and
-in the scene-graph schema doc served by the API.
+`video:remotion` sceneGraphs now accept a top-level `tracks` array: a real
+timeline, like a conventional editor. Scenes play sequentially as the base
+layer; track clips sit at ABSOLUTE frame positions composited above them.
+Use tracks for overlapping clips, B-roll over a base video, PiP, or anything
+needing precise absolute timing. Track array order is z-order (first =
+bottom). All timing is FRAMES (seconds x fps).
+
+```json
+{ "fps": 30, "width": 1080, "height": 1920,
+  "scenes": [ { "type": "video", "src": "{{base}}", "durationInFrames": 300 } ],
+  "tracks": [
+    { "clips": [ { "src": "{{broll}}", "startFrame": 90, "durationInFrames": 120, "muted": true } ] },
+    { "clips": [ { "src": "{{reaction}}", "startFrame": 0, "durationInFrames": 300,
+                   "width": 360, "x": 320, "y": 700 } ] } ] }
+```
+
+Clip fields: `startFrame` (required), `durationInFrames` (required),
+`trimInFrames`/`trimOutFrames`, `playbackRate`, `muted`/`volume`,
+`x`/`y`/`width`/`height`/`scale`/`rotation`/`opacity`/`fit`, `kind:
+"video"|"image"|"text"` (text clips take `text`, `fontSize`, `color`,
+`background`, `fontWeight`).
+
+⚠️ **Coordinates are offsets from the CANVAS CENTER, not top-left.**
+`x: 0, y: 0` means centered; positive x moves right, positive y moves down.
+A 1080x1920 comp's bottom-right quadrant starts around `x: 270, y: 480` for
+a small clip, NOT `x: 540, y: 960`. Same convention as `composite` scene
+layers. Verify placement with the preview endpoint above; the full clip
+shape is in the scene-graph schema doc the API serves.
+
+Comp duration = max(scenes sum, latest clip end), or an explicit top-level
+`explicitDurationInFrames`. Audio rule: when a comp-wide audioTrack replaces
+scene audio, track video clips are muted too unless a clip explicitly sets
+`muted: false` AND a `volume`.
