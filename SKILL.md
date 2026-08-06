@@ -616,7 +616,12 @@ Read these on demand when composing workflows:
   shots + beats JSON → compiled onto the scene graph (camera, SFX timing,
   caption punches, overlay timing). The highest-level way to author a video.
 - `references/compositor.md` — the `compv3` compositor node (image + text/scrim
-  layers) and the LLM→split→nano_banana→compositor "meme/carousel factory" pattern
+  layers) and the LLM→split→nano_banana→compositor "meme/carousel factory"
+  pattern. **Its "Layout contract" section is GENERATED from the validator's own
+  constants and version-stamped** — content-driven sizing (`hug`, `fitTo`,
+  `anchor`), `type: "stack"` flow layout, `itemTemplate` + `variants`, `$runs`,
+  `$gapBefore`, per-corner `cornerRadius` tuples and `$port:` refs all live
+  there. Check its stamp before trusting anything else on that page about layout.
 - `examples/text-to-image.json` — simplest case (Text Input → FAL image gen)
 - `examples/text-to-video.json` — text prompt → image → Kling video
 - `examples/remotion-compose.json` — full pipeline ending in a Remotion
@@ -672,3 +677,97 @@ per run (approximate):
 Before running expensive workflows (Kling, Veo, long Remotion renders),
 confirm with the user. Use `bash scripts/wf.sh credits` to check their
 balance first if the run is large.
+
+<!-- generated:BEGIN section=feedback-endpoint source=src/lib/api/agent-feedback.ts -->
+<!-- generated:STAMP date=2026-08-06 sha=268376098db8 hash=c86bdb19044e -->
+
+> **Generated 2026-08-06 from `src/lib/api/agent-feedback.ts` @ `268376098db8`.**
+> Do not hand-edit between the markers; edit the constant in the Wireflow
+> repo and regenerate. Prose outside the markers is hand-written and safe.
+
+## Telling the maintainers something is wrong — `POST /api/v1/feedback`
+
+When the API refuses something it should have accepted, or a capability you
+needed is missing, POST it. This is a real endpoint, not a mailto, and it is the
+channel the refusal messages point at.
+
+```bash
+curl -sS -X POST "$WIREFLOW_API/api/v1/feedback" \
+  -H "Authorization: Bearer $WIREFLOW_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "stack children cannot declare their own anchor",
+    "body": "Wanted an avatar pinned to the stage while flowing inside the stack…",
+    "category": "missing-capability",
+    "context": { "route": "/api/v1/workflows/{id}/run", "workflowId": "cm…", "repro": "…" }
+  }'
+```
+
+**Request** — `title` and `body` are required strings; `category` and
+`context` are optional. `context` accepts exactly `route`, `workflowId`,
+`executionId` and `repro`.
+
+**Categories** (refused, not coerced, when it is not one of these):
+`bug`, `missing-capability`, `confusing-contract`, `performance`, `other`.
+
+**Caps** — over-length is a refusal naming the field, never a silent truncation:
+
+| field | max |
+|---|---|
+| `title` | 200 chars |
+| `body` | 10,000 chars |
+| `context.repro` | 4,000 chars |
+| `context.route` / `context.workflowId` / `context.executionId` | 200 chars each |
+
+**Rate limits** — 10 submissions per user per rolling hour
+is THE cap (429 `feedback_rate_limited`, with `Retry-After`). A separate
+in-memory burst smoother allows 5/minute per user
+(429 `feedback_burst_limited`); it is per serverless instance, so treat the
+hourly number as the real limit. Nothing is stored when either fires.
+
+**Auth** — any valid API key or a browser session. Not public.
+
+**Success** — `201` with `{ id, message }`. `GET` on this route is a `405`
+that restates the POST shape; it does not list submissions.
+
+Control bytes and bidi/zero-width characters are stripped silently (nobody sends
+them on purpose); everything else arrives exactly as written.
+
+<!-- generated:END section=feedback-endpoint -->
+
+<!-- generated:BEGIN section=present-deck source=src/lib/present/deck.ts -->
+<!-- generated:STAMP date=2026-08-06 sha=268376098db8 hash=80fb3a34ef01 -->
+
+> **Generated 2026-08-06 from `src/lib/present/deck.ts` @ `268376098db8`.**
+> Do not hand-edit between the markers; edit the constant in the Wireflow
+> repo and regenerate. Prose outside the markers is hand-written and safe.
+
+## Presenting a deck — `/flow/<id>/present`
+
+A fullscreen, keyboard-navigable slideshow of a workflow's output images, with
+one-click PDF export. No node graph, so it is what you hand a human.
+
+- **Default (`/flow/<id>/present`)** — the union of the workflow's OUTPUT
+  nodes' images, ordered left→right by canvas X, first-occurrence deduped. If no
+  node resolves as an output, it falls back to every node's images, same L→R
+  order.
+- **Curated (`/flow/<id>/present?node=<nodeId>`)** — exactly that one node's
+  images, in the order they are STORED on the node, with no dedup. Use this
+  whenever order matters: L→R + dedup destroys a hand-ordered deck, because a
+  subset node sitting further left both leads the deck and dedupes the curated
+  node's slides away.
+
+`?node=` may name ANY node, not just an output node — point it at a compositor
+batch directly. A node id that does not resolve, or one holding no still images,
+falls back to the union deck rather than rendering blank.
+
+Videos and audio are filtered out (stills only), as are browser-side preview
+bakes — a deck shows what a RUN produced, never a composite the canvas
+manufactured.
+
+**Visibility** — the page renders for the owner, or for anyone when the workflow
+is link-shared (`linkPermission` `VIEW` or `EDIT`). Otherwise it shows a
+"not shared" placeholder, so set the share permission before sending the link.
+The first slide becomes the OpenGraph/Twitter card image.
+
+<!-- generated:END section=present-deck -->
