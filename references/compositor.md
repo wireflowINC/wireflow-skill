@@ -425,11 +425,12 @@ Notes that save you a redo:
   template with placeholder content still LOOKS live once data is wired.
 
 <!-- generated:BEGIN section=compositor-layout source=src/lib/workflow/workflow-schema.ts -->
-<!-- generated:STAMP date=2026-08-06 sha=268376098db8 hash=85ef50edbc0d -->
+<!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=85ef50edbc0d -->
 
-> **Generated 2026-08-06 from `src/lib/workflow/workflow-schema.ts` @ `268376098db8`.**
-> Do not hand-edit between the markers; edit the constant in the Wireflow
-> repo and regenerate. Prose outside the markers is hand-written and safe.
+> **Generated 2026-08-06 from `src/lib/workflow/workflow-schema.ts` @ `f2bb45595af5`.**
+> Rendered from that file's exported constants, so it cannot disagree with
+> the running validator. Do not hand-edit between the markers; edit the
+> constant in the Wireflow repo and regenerate.
 
 ## Layout contract — the full text the validator enforces
 
@@ -505,11 +506,12 @@ Layers are absolute x/y/width/height by default. Three OPT-IN fields make geomet
 <!-- generated:END section=compositor-layout -->
 
 <!-- generated:BEGIN section=compositor-port-refs source=src/components/workflows/compositor/compositor-validation.ts -->
-<!-- generated:STAMP date=2026-08-06 sha=268376098db8 hash=dd7ff04474d2 -->
+<!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=dd7ff04474d2 -->
 
-> **Generated 2026-08-06 from `src/components/workflows/compositor/compositor-validation.ts` @ `268376098db8`.**
-> Do not hand-edit between the markers; edit the constant in the Wireflow
-> repo and regenerate. Prose outside the markers is hand-written and safe.
+> **Generated 2026-08-06 from `src/components/workflows/compositor/compositor-validation.ts` @ `f2bb45595af5`.**
+> Rendered from that file's exported constants, so it cannot disagree with
+> the running validator. Do not hand-edit between the markers; edit the
+> constant in the Wireflow repo and regenerate.
 
 ## Wireable assets — `$port:<name>`
 

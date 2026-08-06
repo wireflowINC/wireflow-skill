@@ -679,11 +679,12 @@ confirm with the user. Use `bash scripts/wf.sh credits` to check their
 balance first if the run is large.
 
 <!-- generated:BEGIN section=feedback-endpoint source=src/lib/api/agent-feedback.ts -->
-<!-- generated:STAMP date=2026-08-06 sha=268376098db8 hash=c86bdb19044e -->
+<!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=f3638481e285 -->
 
-> **Generated 2026-08-06 from `src/lib/api/agent-feedback.ts` @ `268376098db8`.**
-> Do not hand-edit between the markers; edit the constant in the Wireflow
-> repo and regenerate. Prose outside the markers is hand-written and safe.
+> **Generated 2026-08-06 from `src/lib/api/agent-feedback.ts` @ `f2bb45595af5`.**
+> Rendered from that file's exported constants, so it cannot disagree with
+> the running validator. Do not hand-edit between the markers; edit the
+> constant in the Wireflow repo and regenerate.
 
 ## Telling the maintainers something is wrong — `POST /api/v1/feedback`
 
@@ -704,8 +705,13 @@ curl -sS -X POST "$WIREFLOW_API/api/v1/feedback" \
 ```
 
 **Request** — `title` and `body` are required strings; `category` and
-`context` are optional. `context` accepts exactly `route`, `workflowId`,
-`executionId` and `repro`.
+`context` are optional.
+
+**`context` reads exactly four keys** — `route`, `workflowId`,
+`executionId` and `repro`. ⚠️ Any OTHER key you put in `context` is
+silently DROPPED, not refused: it is accepted, stored nowhere, and you get a
+`201`. Put anything that does not fit those four into `body`, which is the
+field nothing trims.
 
 **Categories** (refused, not coerced, when it is not one of these):
 `bug`, `missing-capability`, `confusing-contract`, `performance`, `other`.
@@ -736,34 +742,46 @@ them on purpose); everything else arrives exactly as written.
 <!-- generated:END section=feedback-endpoint -->
 
 <!-- generated:BEGIN section=present-deck source=src/lib/present/deck.ts -->
-<!-- generated:STAMP date=2026-08-06 sha=268376098db8 hash=80fb3a34ef01 -->
+<!-- generated:STAMP kind=hand-written date=2026-08-06 sha=f2bb45595af5 hash=bcb7c2132793 -->
 
-> **Generated 2026-08-06 from `src/lib/present/deck.ts` @ `268376098db8`.**
-> Do not hand-edit between the markers; edit the constant in the Wireflow
-> repo and regenerate. Prose outside the markers is hand-written and safe.
+> **Hand-written. Verified 2026-08-06 against `src/lib/present/deck.ts` @ `f2bb45595af5`.**
+> ⚠️ This is prose a human checked on that date, NOT text rendered from an
+> exported constant — it can drift from the code without anything failing.
+> Re-read the source before relying on a detail it does not state outright.
 
 ## Presenting a deck — `/flow/<id>/present`
 
 A fullscreen, keyboard-navigable slideshow of a workflow's output images, with
 one-click PDF export. No node graph, so it is what you hand a human.
 
-- **Default (`/flow/<id>/present`)** — the union of the workflow's OUTPUT
-  nodes' images, ordered left→right by canvas X, first-occurrence deduped. If no
-  node resolves as an output, it falls back to every node's images, same L→R
-  order.
-- **Curated (`/flow/<id>/present?node=<nodeId>`)** — exactly that one node's
-  images, in the order they are STORED on the node, with no dedup. Use this
-  whenever order matters: L→R + dedup destroys a hand-ordered deck, because a
+🔴 **THE TWO MODES DO NOT HAVE THE SAME GUARANTEES.** Read this before choosing
+one; the difference is not cosmetic.
+
+**Curated — `?node=<nodeId>`**
+
+- Exactly that one node's images, in the order they are STORED on the node.
+- **No dedup**, so a deck may legitimately repeat a slide.
+- **Browser-side preview bakes are EXCLUDED.** A composite the canvas
+  manufactured never appears; only what a run actually produced.
+- `?node=` may name ANY node, not just an output node — point it at a
+  compositor batch directly.
+- Use this whenever order matters. L→R + dedup destroys a hand-ordered deck: a
   subset node sitting further left both leads the deck and dedupes the curated
   node's slides away.
 
-`?node=` may name ANY node, not just an output node — point it at a compositor
-batch directly. A node id that does not resolve, or one holding no still images,
-falls back to the union deck rather than rendering blank.
+**Default — no `?node=`**
 
-Videos and audio are filtered out (stills only), as are browser-side preview
-bakes — a deck shows what a RUN produced, never a composite the canvas
-manufactured.
+- The union of the workflow's OUTPUT nodes' images, ordered left→right by canvas
+  X, first-occurrence deduped.
+- ⚠️ **NO BAKE PROTECTION ON THIS PATH.** It collects every image URL it can
+  find on each node, and a browser-manufactured preview composite will appear in
+  the deck like any other slide. Only the curated path filters them.
+- Falls back to collecting from EVERY node (same L→R dedup) whenever the output
+  nodes yield ZERO images — which includes the case where no node resolves as an
+  output, but is not limited to it. A node whose only images were bakes
+  contributes nothing to the curated path and so can trigger this fallback.
+
+Both modes drop `blob:` URLs, video and audio; a deck is stills only.
 
 **Visibility** — the page renders for the owner, or for anyone when the workflow
 is link-shared (`linkPermission` `VIEW` or `EDIT`). Otherwise it shows a
@@ -771,3 +789,21 @@ is link-shared (`linkPermission` `VIEW` or `EDIT`). Otherwise it shows a
 The first slide becomes the OpenGraph/Twitter card image.
 
 <!-- generated:END section=present-deck -->
+
+<!-- generated:BEGIN section=workflow-layout source=src/lib/workflow/workflow-schema.ts -->
+<!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=ca10325d7d21 -->
+
+> **Generated 2026-08-06 from `src/lib/workflow/workflow-schema.ts` @ `f2bb45595af5`.**
+> Rendered from that file's exported constants, so it cannot disagree with
+> the running validator. Do not hand-edit between the markers; edit the
+> constant in the Wireflow repo and regenerate.
+
+## Arranging the BOARD — `POST /api/v1/workflows/{id}/layout`
+
+⚠️ Not to be confused with the compositor layout contract in
+`references/compositor.md`. That one arranges LAYERS inside a rendered image;
+this one arranges NODE CARDS on the canvas an author looks at.
+
+DO NOT compute node positions from guessed sizes. GET /api/v1/workflows/{id} returns `dims: { width, height, source }` per node — the RENDERED box, where `source` is "measured" (a real measurement persisted from an editor session) or "estimated" (a per-nodeType model). Heights are NOT predictable from port count: a card whose run filled a result gallery renders several times taller than the same card unrun, which is exactly what breaks a port-count estimate. To arrange a board, POST /api/v1/workflows/{id}/layout with an empty body. It lays the graph out left-to-right in dependency layers using those real sizes, writes the new positions, and returns `{ positions, moved, bounds }`. It touches POSITIONS ONLY — never data, config, node types or edges. Options, all optional: `gapX` / `gapY` (px between columns / stacked cards) and `scope`. `scope: "all"` (the default) lays out everything; `scope: ["nodeId", ...]` lays out ONLY those nodes, leaves every other position byte-identical, and places the scoped block BELOW the bounding box of the untouched nodes. It is deterministic: the same graph in gives byte-identical positions out. A write that leaves cards on top of each other comes back with a non-blocking `layout.overlap` diagnostic listing the overlapping pairs in `data.pairs`; it never blocks the save.
+
+<!-- generated:END section=workflow-layout -->
