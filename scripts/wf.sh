@@ -22,6 +22,8 @@
 #   wf.sh list                           # list workflows
 #   wf.sh get <workflowId>               # fetch one workflow
 #   wf.sh duplicate <flowId> [name]      # server-side clone → prints new id + url
+#   wf.sh publish <workflowId>           # make the public page live (VIEW; re-sanitizes nodes)
+#   wf.sh unpublish <workflowId>         # back to PRIVATE
 #   wf.sh delete <workflowId>            # delete a workflow (clean up test/double-created flows)
 #   wf.sh inputs <workflowId>            # show valid input keys for /run
 #   wf.sh upload <file|url>              # host a local file/remote url → prints CDN url
@@ -119,6 +121,41 @@ fi
 CURL_FLAGS=(-sS -L)
 AUTH=(-H "Authorization: Bearer $WIREFLOW_API_KEY")
 CT=(-H "Content-Type: application/json")
+
+# --- ARG_MAX guard for request bodies -----------------------------------
+# A workflow graph carrying result history runs to megabytes, and
+# `--data-binary "$body"` ships the whole thing as ONE argv entry. Past
+# ARG_MAX the exec dies with "Argument list too long" — the request is never
+# made, and on a verb whose next step is a poll that reads as "nothing
+# happened" rather than as a failure. Every potentially-large body is written
+# to a temp file and travels as `--data-binary @file` instead, which curl
+# streams.
+#
+# ONE exit trap owns cleanup. `rm -f` right after the call is not enough:
+# `set -e` is on, so any non-zero between mktemp and the rm skips it, and a
+# Ctrl-C during a slow upload skips it too.
+#
+# 🔴 A DIRECTORY, not a registry array. The obvious version keeps an array of
+# paths and appends in `wf_tmpfile`, but the call site is
+# `f=$(wf_tmpfile)` — a COMMAND SUBSTITUTION, i.e. a subshell — so the append
+# dies with the subshell and the trap always sees an empty list. Measured: the
+# body files survived the run. One directory sidesteps the whole problem,
+# because the trap needs no per-file bookkeeping.
+WF_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/wf-body.XXXXXX")
+wf_cleanup_tmpfiles() { rm -rf "$WF_TMPDIR"; return 0; }
+trap wf_cleanup_tmpfiles EXIT INT TERM
+
+# wf_tmpfile — a temp path inside the auto-cleaned dir. Echoes the path.
+wf_tmpfile() { mktemp "$WF_TMPDIR/body.XXXXXX"; }
+
+# wf_body_file <json> — spill a body string to a temp file. Echoes the path,
+# so the call site reads `--data-binary "@$(wf_body_file "$body")"`.
+wf_body_file() {
+  local f
+  f=$(wf_tmpfile)
+  printf '%s' "$1" >"$f"
+  printf '%s' "$f"
+}
 
 # Status-aware curl for WRITES. Retries on 429 (rate limit) with backoff, then
 # prints the response BODY followed by a final line carrying the HTTP status
@@ -423,8 +460,11 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
         body=$(printf '%s' "$json" | jq -c --arg t "$base_ts" '. + {baseUpdatedAt:$t}')
       fi
     fi
+    # Via temp file: a node patch is small for a prompt tweak, but a compv3
+    # `data` patch carries the whole layer document and blows ARG_MAX.
     resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
-      -X PATCH "$BASE/workflows/$id/nodes/$node_id" --data-binary "$body")
+      -X PATCH "$BASE/workflows/$id/nodes/$node_id" \
+      --data-binary "@$(wf_body_file "$body")")
     code=$(printf '%s' "$resp" | tail -n1)
     payload=$(printf '%s' "$resp" | sed '$d')
     case "$code" in
@@ -520,9 +560,11 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
       exit 1
     fi
     [ -n "$save" ] && cp "$out" "$save" && echo "saved organized graph -> $save" >&2
-    # swap only nodes/edges back into the full object so the PUT preserves
-    # name/tags/settings, then graph-lint before writing
-    jq --slurpfile o "$out" '.nodes=$o[0].nodes | .edges=$o[0].edges' "$full" > "$put"
+    # Build the PUT body from WRITABLE fields only. Round-tripping the full
+    # GET object 400s: the API rejects non-writable fields (linkPermission
+    # since 2026-07 — "use POST /visibility"), and server-derived state
+    # (userId/mediaId/timestamps) doesn't belong in a PUT either.
+    jq --slurpfile o "$out" '{name, description, tags, isActive, nodes: $o[0].nodes, edges: $o[0].edges} | with_entries(select(.value != null))' "$full" > "$put"
     # Same gate as create/update: repo wf-check.ts on-repo, else server-side
     # /workflows/lint — so organize's apply step is gated without the repo too.
     if [ -z "${WF_SKIP_CHECK:-}" ]; then
@@ -545,8 +587,11 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
       curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
         -X POST "$BASE/workflows/$id/run" --data-binary "@$inputs"
     else
+      # Inline JSON still goes via a temp file — an inputs blob can carry a
+      # base64 payload or a long caption array and blow ARG_MAX as argv.
       curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
-        -X POST "$BASE/workflows/$id/run" --data-binary "$inputs"
+        -X POST "$BASE/workflows/$id/run" \
+        --data-binary "@$(wf_body_file "$inputs")"
     fi
     ;;
 
@@ -563,17 +608,19 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
     # Returns an executionId — poll it with `wf.sh poll <executionId>`.
     wf_id="${1:?usage: wf.sh run-node <workflowId> <nodeId>}"
     node_id="${2:?usage: wf.sh run-node <workflowId> <nodeId>}"
-    body=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
+    # Body via temp file: a graph with result history exceeds ARG_MAX as argv.
+    rn_body=$(wf_tmpfile)
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
       | NODE_ID="$node_id" python3 -c '
 import json, sys, os
 wf = json.load(sys.stdin)
-sys.stdout.write(json.dumps({
+json.dump({
     "nodes": wf.get("nodes", []),
     "edges": wf.get("edges", []),
     "targetNodeId": os.environ["NODE_ID"],
-}))')
+}, open(sys.argv[1], "w"))' "$rn_body"
     resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
-      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body")
+      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "@$rn_body")
     code=$(printf '%s' "$resp" | tail -n1)
     body=$(printf '%s' "$resp" | sed '$d')
     printf '%s\n' "$body"
@@ -605,17 +652,20 @@ for s in (d.get("staleDependencies") or []):
     # full re-roll from scratch, ignoring all prior renders/generations. Use
     # when you suspect stale cached state anywhere in the graph.
     wf_id="${1:?usage: wf.sh run-force <workflowId>}"
-    body=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
+    # Body goes via a temp file: a graph carrying result history exceeds
+    # ARG_MAX, and --data-binary "$var" ships the whole body as one argv.
+    rf_body=$(wf_tmpfile)
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
       | python3 -c '
 import json, sys
 wf = json.load(sys.stdin)
-sys.stdout.write(json.dumps({
+json.dump({
     "nodes": wf.get("nodes", []),
     "edges": wf.get("edges", []),
     "force": True,
-}))')
+}, open(sys.argv[1], "w"))' "$rf_body"
     resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
-      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body")
+      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "@$rf_body")
     code=$(printf '%s' "$resp" | tail -n1)
     printf '%s\n' "$(printf '%s' "$resp" | sed '$d')"
     case "$code" in
@@ -740,6 +790,45 @@ sys.stdout.write(json.dumps({
     esac
     ;;
 
+  publish|unpublish)
+    # Flip a workflow's public visibility via POST :id/visibility (shipped
+    # 2026-07-20; needs the endpoint deployed). publish = VIEW (public page at
+    # /workflows/<id>), unpublish = PRIVATE. Going public re-sanitizes nodes
+    # server-side (secret-shaped config/params values are wiped in place).
+    # NOTE: the v1 PUT silently ignored linkPermission historically and now
+    # 400s on it — this verb is the correct path.
+    id="${1:?usage: wf.sh publish|unpublish <workflowId>}"
+    if [ "$cmd" = "publish" ]; then vis="view"; else vis="private"; fi
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
+      -X POST "$BASE/workflows/$id/visibility" \
+      --data-binary "$(jq -nc --arg v "$vis" '{visibility:$v}')") || true
+    code=$(printf '%s' "$resp" | tail -n1)
+    payload=$(printf '%s' "$resp" | sed '$d')
+    case "$code" in
+      2*)
+        perm=$(printf '%s' "$payload" | jq -r '.linkPermission // .data.linkPermission // empty' 2>/dev/null || true)
+        url=$(printf '%s' "$payload" | jq -r '.url // .data.url // empty' 2>/dev/null || true)
+        if [ -z "$perm" ]; then
+          echo "✗ $cmd returned HTTP $code but no linkPermission in the response:" >&2
+          printf '%s\n' "$payload" >&2
+          exit 1
+        fi
+        printf 'linkPermission: %s\n' "$perm"
+        if [ -n "$url" ]; then printf 'url: %s\n' "$url"; fi
+        ;;
+      404)
+        echo "✗ $cmd failed (HTTP 404) — workflow not found, not yours, or the /visibility endpoint is not deployed yet" >&2
+        exit 1 ;;
+      ''|000)
+        echo "✗ $cmd failed — could not reach $BASE (connection error)" >&2
+        exit 1 ;;
+      *)
+        echo "✗ $cmd failed (HTTP $code)" >&2
+        printf '%s\n' "$payload" >&2
+        exit 1 ;;
+    esac
+    ;;
+
   delete)
     # Delete a workflow (cleans up double-creates / throwaway test flows so they
     # don't pile up). Scope: workflows:write. Irreversible — deletes only the
@@ -817,8 +906,10 @@ sys.stdout.write(json.dumps({
       curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
         -X POST "$BASE/render/remotion/preview" --data-binary "@$file"
     else
+      # A whole sceneGraph inline is exactly the shape that overflows argv.
       curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
-        -X POST "$BASE/render/remotion/preview" --data-binary "$file"
+        -X POST "$BASE/render/remotion/preview" \
+        --data-binary "@$(wf_body_file "$file")"
     fi
     ;;
 
