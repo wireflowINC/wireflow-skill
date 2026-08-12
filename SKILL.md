@@ -90,12 +90,18 @@ When the user asks you to build or run a Wireflow workflow:
    graph: `update` re-runs graph-lint AND auto-layout, so the canvas the
    user opens is clean — edited graphs are the main source of overlapping
    nodes.
-6. **Run** — `bash scripts/wf.sh run <id> '{"inputs": {"<nodeId>": "..."}}'`
-7. **Poll / wait** — `bash scripts/wf.sh wait <executionId>` BLOCKS until
+6. **Estimate** — `bash scripts/wf.sh estimate <id>` before any non-trivial
+   run: predicted total credits, per-node breakdown, provider cost in USD,
+   the balance, and a `sufficient` flag, computed from the actual graph.
+   Quote THIS number to the user, never a rule of thumb. If
+   `estimateComplete` is false the total is a LOWER BOUND (see
+   `references/api.md` for why).
+7. **Run** — `bash scripts/wf.sh run <id> '{"inputs": {"<nodeId>": "..."}}'`
+8. **Poll / wait** — `bash scripts/wf.sh wait <executionId>` BLOCKS until
    `COMPLETED`/`FAILED`, printing **per-node status each tick** and the failing
    node's error (so you can tell "rendering" from "dead"). It's rate-aware
    (6s ticks, backs off on 429). Use `wf.sh poll` for a single snapshot.
-8. **Return** — hand the user the workflow URL (so they can inspect/remix
+9. **Return** — hand the user the workflow URL (so they can inspect/remix
    in the visual editor) and the final output URL (image, MP4, MP3)
 
 > **Observability — poll the EXECUTION, not the workflow.** Per-node run state
@@ -616,7 +622,12 @@ Read these on demand when composing workflows:
   shots + beats JSON → compiled onto the scene graph (camera, SFX timing,
   caption punches, overlay timing). The highest-level way to author a video.
 - `references/compositor.md` — the `compv3` compositor node (image + text/scrim
-  layers) and the LLM→split→nano_banana→compositor "meme/carousel factory" pattern
+  layers) and the LLM→split→nano_banana→compositor "meme/carousel factory"
+  pattern. **Its "Layout contract" section is GENERATED from the validator's own
+  constants and version-stamped** — content-driven sizing (`hug`, `fitTo`,
+  `anchor`), `type: "stack"` flow layout, `itemTemplate` + `variants`, `$runs`,
+  `$gapBefore`, per-corner `cornerRadius` tuples and `$port:` refs all live
+  there. Check its stamp before trusting anything else on that page about layout.
 - `examples/text-to-image.json` — simplest case (Text Input → FAL image gen)
 - `examples/text-to-video.json` — text prompt → image → Kling video
 - `examples/remotion-compose.json` — full pipeline ending in a Remotion
@@ -662,13 +673,141 @@ Do **not** trigger for:
 
 ## Cost & credit awareness
 
-Every run costs credits against the user's Wireflow account. Common costs
-per run (approximate):
+Every run costs credits against the user's Wireflow account. **Do not guess
+costs from rules of thumb — ask the API.** `bash scripts/wf.sh estimate <id>`
+(POST /workflows/{id}/estimate) returns the predicted total, a per-node
+breakdown, the provider cost in USD, the account balance, and a `sufficient`
+flag, all computed from the actual graph. Quote THAT number to the user.
 
-- Simple text→image: ~5-20 credits
-- Text→video (Kling 1.6): ~300-600 credits
-- Full Remotion compose with 5 shots + audio: ~1000-2000 credits
+Before running expensive workflows (per the estimate), confirm with the user.
+`bash scripts/wf.sh credits` shows the raw balance/usage.
 
-Before running expensive workflows (Kling, Veo, long Remotion renders),
-confirm with the user. Use `bash scripts/wf.sh credits` to check their
-balance first if the run is large.
+<!-- generated:BEGIN section=feedback-endpoint source=src/lib/api/agent-feedback.ts -->
+<!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=f3638481e285 -->
+
+> **Generated 2026-08-06 from `src/lib/api/agent-feedback.ts` @ `f2bb45595af5`.**
+> Rendered from that file's exported constants, so it cannot disagree with
+> the running validator. Do not hand-edit between the markers; edit the
+> constant in the Wireflow repo and regenerate.
+
+## Telling the maintainers something is wrong — `POST /api/v1/feedback`
+
+When the API refuses something it should have accepted, or a capability you
+needed is missing, POST it. This is a real endpoint, not a mailto, and it is the
+channel the refusal messages point at.
+
+```bash
+curl -sS -X POST "$WIREFLOW_API/api/v1/feedback" \
+  -H "Authorization: Bearer $WIREFLOW_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "stack children cannot declare their own anchor",
+    "body": "Wanted an avatar pinned to the stage while flowing inside the stack…",
+    "category": "missing-capability",
+    "context": { "route": "/api/v1/workflows/{id}/run", "workflowId": "cm…", "repro": "…" }
+  }'
+```
+
+**Request** — `title` and `body` are required strings; `category` and
+`context` are optional.
+
+**`context` reads exactly four keys** — `route`, `workflowId`,
+`executionId` and `repro`. ⚠️ Any OTHER key you put in `context` is
+silently DROPPED, not refused: it is accepted, stored nowhere, and you get a
+`201`. Put anything that does not fit those four into `body`, which is the
+field nothing trims.
+
+**Categories** (refused, not coerced, when it is not one of these):
+`bug`, `missing-capability`, `confusing-contract`, `performance`, `other`.
+
+**Caps** — over-length is a refusal naming the field, never a silent truncation:
+
+| field | max |
+|---|---|
+| `title` | 200 chars |
+| `body` | 10,000 chars |
+| `context.repro` | 4,000 chars |
+| `context.route` / `context.workflowId` / `context.executionId` | 200 chars each |
+
+**Rate limits** — 10 submissions per user per rolling hour
+is THE cap (429 `feedback_rate_limited`, with `Retry-After`). A separate
+in-memory burst smoother allows 5/minute per user
+(429 `feedback_burst_limited`); it is per serverless instance, so treat the
+hourly number as the real limit. Nothing is stored when either fires.
+
+**Auth** — any valid API key or a browser session. Not public.
+
+**Success** — `201` with `{ id, message }`. `GET` on this route is a `405`
+that restates the POST shape; it does not list submissions.
+
+Control bytes and bidi/zero-width characters are stripped silently (nobody sends
+them on purpose); everything else arrives exactly as written.
+
+<!-- generated:END section=feedback-endpoint -->
+
+<!-- generated:BEGIN section=present-deck source=src/lib/present/deck.ts -->
+<!-- generated:STAMP kind=hand-written date=2026-08-06 sha=f2bb45595af5 hash=bcb7c2132793 -->
+
+> **Hand-written. Verified 2026-08-06 against `src/lib/present/deck.ts` @ `f2bb45595af5`.**
+> ⚠️ This is prose a human checked on that date, NOT text rendered from an
+> exported constant — it can drift from the code without anything failing.
+> Re-read the source before relying on a detail it does not state outright.
+
+## Presenting a deck — `/flow/<id>/present`
+
+A fullscreen, keyboard-navigable slideshow of a workflow's output images, with
+one-click PDF export. No node graph, so it is what you hand a human.
+
+🔴 **THE TWO MODES DO NOT HAVE THE SAME GUARANTEES.** Read this before choosing
+one; the difference is not cosmetic.
+
+**Curated — `?node=<nodeId>`**
+
+- Exactly that one node's images, in the order they are STORED on the node.
+- **No dedup**, so a deck may legitimately repeat a slide.
+- **Browser-side preview bakes are EXCLUDED.** A composite the canvas
+  manufactured never appears; only what a run actually produced.
+- `?node=` may name ANY node, not just an output node — point it at a
+  compositor batch directly.
+- Use this whenever order matters. L→R + dedup destroys a hand-ordered deck: a
+  subset node sitting further left both leads the deck and dedupes the curated
+  node's slides away.
+
+**Default — no `?node=`**
+
+- The union of the workflow's OUTPUT nodes' images, ordered left→right by canvas
+  X, first-occurrence deduped.
+- ⚠️ **NO BAKE PROTECTION ON THIS PATH.** It collects every image URL it can
+  find on each node, and a browser-manufactured preview composite will appear in
+  the deck like any other slide. Only the curated path filters them.
+- Falls back to collecting from EVERY node (same L→R dedup) whenever the output
+  nodes yield ZERO images — which includes the case where no node resolves as an
+  output, but is not limited to it. A node whose only images were bakes
+  contributes nothing to the curated path and so can trigger this fallback.
+
+Both modes drop `blob:` URLs, video and audio; a deck is stills only.
+
+**Visibility** — the page renders for the owner, or for anyone when the workflow
+is link-shared (`linkPermission` `VIEW` or `EDIT`). Otherwise it shows a
+"not shared" placeholder, so set the share permission before sending the link.
+The first slide becomes the OpenGraph/Twitter card image.
+
+<!-- generated:END section=present-deck -->
+
+<!-- generated:BEGIN section=workflow-layout source=src/lib/workflow/workflow-schema.ts -->
+<!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=ca10325d7d21 -->
+
+> **Generated 2026-08-06 from `src/lib/workflow/workflow-schema.ts` @ `f2bb45595af5`.**
+> Rendered from that file's exported constants, so it cannot disagree with
+> the running validator. Do not hand-edit between the markers; edit the
+> constant in the Wireflow repo and regenerate.
+
+## Arranging the BOARD — `POST /api/v1/workflows/{id}/layout`
+
+⚠️ Not to be confused with the compositor layout contract in
+`references/compositor.md`. That one arranges LAYERS inside a rendered image;
+this one arranges NODE CARDS on the canvas an author looks at.
+
+DO NOT compute node positions from guessed sizes. GET /api/v1/workflows/{id} returns `dims: { width, height, source }` per node — the RENDERED box, where `source` is "measured" (a real measurement persisted from an editor session) or "estimated" (a per-nodeType model). Heights are NOT predictable from port count: a card whose run filled a result gallery renders several times taller than the same card unrun, which is exactly what breaks a port-count estimate. To arrange a board, POST /api/v1/workflows/{id}/layout with an empty body. It lays the graph out left-to-right in dependency layers using those real sizes, writes the new positions, and returns `{ positions, moved, bounds }`. It touches POSITIONS ONLY — never data, config, node types or edges. Options, all optional: `gapX` / `gapY` (px between columns / stacked cards) and `scope`. `scope: "all"` (the default) lays out everything; `scope: ["nodeId", ...]` lays out ONLY those nodes, leaves every other position byte-identical, and places the scoped block BELOW the bounding box of the untouched nodes. It is deterministic: the same graph in gives byte-identical positions out. A write that leaves cards on top of each other comes back with a non-blocking `layout.overlap` diagnostic listing the overlapping pairs in `data.pairs`; it never blocks the save.
+
+<!-- generated:END section=workflow-layout -->

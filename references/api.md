@@ -178,6 +178,44 @@ predates this endpoint (404) or errors: standalone `wf.sh check` fails CLOSED
 
 ## Execution
 
+### `POST /workflows/:id/estimate` — predicted cost of a run
+
+Ask BEFORE running anything non-trivial; quote this number to the user, never
+a rule of thumb. Auth scope: `workflows:read`. Body is optional — send `{}`.
+
+```bash
+curl -X POST -H "Authorization: Bearer $WIREFLOW_API_KEY" \
+  -H 'Content-Type: application/json' -d '{}' \
+  https://www.wireflow.ai/api/v1/workflows/<id>/estimate
+```
+
+Response (everything nests under `data`):
+
+```jsonc
+{ "data": {
+    "workflowId": "cm…",
+    "estimatedCredits": 138,          // total predicted credits for one run
+    "estimatedProviderCostUsd": 1.02, // upstream provider cost in USD
+    "availableCredits": 9857,
+    "creditSource": "user:1",
+    "sufficient": true,               // balance covers the estimate
+    "estimateComplete": true,         // ⚠️ see caveat below
+    "breakdown": [                    // one entry per billable node
+      { "nodeId": "tp-reveal-i2v", "nodeLabel": "Reveal clip (i2v)",
+        "model": "bytedance/seedance-2.0/text-to-video",
+        "credits": 85, "unitCredits": 85, "iterations": 1,
+        "unknownIterations": false, "fanOutUncertainty": "none" } ],
+    "warnings": []
+} }
+```
+
+⚠️ **`estimateComplete: false` means the total is a LOWER BOUND, not a
+quote.** It happens when an iterator's list comes from a node that has not
+run yet, so the fan-out count is unknown (`unknownIterations: true` /
+`fanOutUncertainty` on the affected entries). The `warnings` array says which
+case applies. Tell the user it is a floor, or run the upstream node first
+(`wf.sh run-node`) and re-estimate.
+
 ### `POST /workflows/:id/run` — run with inputs
 
 Higher-level wrapper around `/execute`. Takes friendly `inputs` keyed by

@@ -936,6 +936,15 @@ json.dump({
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/developer/usage"
     ;;
 
+  estimate)
+    # wf.sh estimate <workflowId> — predicted credit cost of a run, per node.
+    # Quote THIS number to the user, never a rule of thumb; estimateComplete
+    # false means the total is a lower bound (see references/api.md).
+    id="${1:?usage: wf.sh estimate <workflowId>}"
+    curl "${CURL_FLAGS[@]}" -X POST "${AUTH[@]}" -H 'Content-Type: application/json' \
+      -d '{}' "$BASE/workflows/$id/estimate"
+    ;;
+
   ""|-h|--help|help)
     sed -n '2,40p' "$0"
     ;;
