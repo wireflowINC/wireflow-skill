@@ -330,3 +330,25 @@ balance:
 curl -H "Authorization: Bearer $WIREFLOW_API_KEY" \
   https://www.wireflow.ai/api/v1/developer/usage
 ```
+
+## Pricing and credits: how to reason about cost
+
+- **Estimates are LOWER BOUNDS, not quotes.** The execute pre-check cannot
+  know output duration for per-second models (talking avatars, some video
+  models) or fan-out counts for iterators before the run. Real bills of 5-10x
+  the estimate are possible on those nodes. Budget accordingly; check the
+  credit balance before and after expensive runs via `/developer/usage`.
+- **The ledger is the truth.** Per-node billing happens at execution time
+  from the model's real pricing dimensions (duration, resolution, variant).
+  The `costUsd` field in the public node catalog is display metadata; it is
+  NOT the billing engine. Never conclude "this node bills zero" or "found a
+  pricing leak" from a catalog read. If a bill looks wrong, report the
+  executionId and the observed charge and let a human check the ledger.
+- **Per-second models multiply.** A talking-avatar render is priced per
+  second of OUTPUT; a 60s audio track means 60x the per-second rate. Trim
+  audio before rendering when testing.
+- **Iterators multiply too.** N items upstream of a paid node = N bills.
+  Count your fan-out before running.
+- **Cheap verification first.** The remotion preview endpoint (stills, cents)
+  and building with small/short test inputs cost almost nothing compared to a
+  mis-estimated full render.
