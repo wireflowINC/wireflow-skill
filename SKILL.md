@@ -90,12 +90,18 @@ When the user asks you to build or run a Wireflow workflow:
    graph: `update` re-runs graph-lint AND auto-layout, so the canvas the
    user opens is clean — edited graphs are the main source of overlapping
    nodes.
-6. **Run** — `bash scripts/wf.sh run <id> '{"inputs": {"<nodeId>": "..."}}'`
-7. **Poll / wait** — `bash scripts/wf.sh wait <executionId>` BLOCKS until
+6. **Estimate** — `bash scripts/wf.sh estimate <id>` before any non-trivial
+   run: predicted total credits, per-node breakdown, provider cost in USD,
+   the balance, and a `sufficient` flag, computed from the actual graph.
+   Quote THIS number to the user, never a rule of thumb. If
+   `estimateComplete` is false the total is a LOWER BOUND (see
+   `references/api.md` for why).
+7. **Run** — `bash scripts/wf.sh run <id> '{"inputs": {"<nodeId>": "..."}}'`
+8. **Poll / wait** — `bash scripts/wf.sh wait <executionId>` BLOCKS until
    `COMPLETED`/`FAILED`, printing **per-node status each tick** and the failing
    node's error (so you can tell "rendering" from "dead"). It's rate-aware
    (6s ticks, backs off on 429). Use `wf.sh poll` for a single snapshot.
-8. **Return** — hand the user the workflow URL (so they can inspect/remix
+9. **Return** — hand the user the workflow URL (so they can inspect/remix
    in the visual editor) and the final output URL (image, MP4, MP3)
 
 > **Observability — poll the EXECUTION, not the workflow.** Per-node run state
@@ -667,16 +673,14 @@ Do **not** trigger for:
 
 ## Cost & credit awareness
 
-Every run costs credits against the user's Wireflow account. Common costs
-per run (approximate):
+Every run costs credits against the user's Wireflow account. **Do not guess
+costs from rules of thumb — ask the API.** `bash scripts/wf.sh estimate <id>`
+(POST /workflows/{id}/estimate) returns the predicted total, a per-node
+breakdown, the provider cost in USD, the account balance, and a `sufficient`
+flag, all computed from the actual graph. Quote THAT number to the user.
 
-- Simple text→image: ~5-20 credits
-- Text→video (Kling 1.6): ~300-600 credits
-- Full Remotion compose with 5 shots + audio: ~1000-2000 credits
-
-Before running expensive workflows (Kling, Veo, long Remotion renders),
-confirm with the user. Use `bash scripts/wf.sh credits` to check their
-balance first if the run is large.
+Before running expensive workflows (per the estimate), confirm with the user.
+`bash scripts/wf.sh credits` shows the raw balance/usage.
 
 <!-- generated:BEGIN section=feedback-endpoint source=src/lib/api/agent-feedback.ts -->
 <!-- generated:STAMP kind=generated date=2026-08-06 sha=f2bb45595af5 hash=f3638481e285 -->

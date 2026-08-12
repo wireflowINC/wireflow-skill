@@ -511,7 +511,11 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
     [ -n "$save" ] && cp "$out" "$save" && echo "saved organized graph -> $save" >&2
     # swap only nodes/edges back into the full object so the PUT preserves
     # name/tags/settings, then graph-lint before writing
-    jq --slurpfile o "$out" '.nodes=$o[0].nodes | .edges=$o[0].edges' "$full" > "$put"
+    # WHITELIST writable fields: the PUT hard-refuses read-only ones one at a
+    # time (linkPermission → /visibility, isPublished → /publish, …), so a
+    # GET-echo payload 400s on a shared or published workflow. Send only what
+    # organize actually changes plus the identity fields update also sends.
+    jq --slurpfile o "$out" '{name, description, tags, isActive, nodes: $o[0].nodes, edges: $o[0].edges}' "$full" > "$put"
     # Same gate as create/update: repo wf-check.ts on-repo, else server-side
     # /workflows/lint — so organize's apply step is gated without the repo too.
     if [ -z "${WF_SKIP_CHECK:-}" ]; then
@@ -552,7 +556,9 @@ print(((d.get("data") or d) or {}).get("updatedAt") or "")' 2>/dev/null)
     # Returns an executionId — poll it with `wf.sh poll <executionId>`.
     wf_id="${1:?usage: wf.sh run-node <workflowId> <nodeId>}"
     node_id="${2:?usage: wf.sh run-node <workflowId> <nodeId>}"
-    body=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
+    # body via temp file: a grown graph (result history) exceeds ARG_MAX as argv
+    rn_body=$(mktemp)
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
       | NODE_ID="$node_id" python3 -c '
 import json, sys, os
 wf = json.load(sys.stdin)
@@ -560,9 +566,10 @@ sys.stdout.write(json.dumps({
     "nodes": wf.get("nodes", []),
     "edges": wf.get("edges", []),
     "targetNodeId": os.environ["NODE_ID"],
-}))')
+}))' > "$rn_body"
     resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
-      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body")
+      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "@$rn_body")
+    rm -f "$rn_body"
     code=$(printf '%s' "$resp" | tail -n1)
     body=$(printf '%s' "$resp" | sed '$d')
     printf '%s\n' "$body"
@@ -594,7 +601,9 @@ for s in (d.get("staleDependencies") or []):
     # full re-roll from scratch, ignoring all prior renders/generations. Use
     # when you suspect stale cached state anywhere in the graph.
     wf_id="${1:?usage: wf.sh run-force <workflowId>}"
-    body=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
+    # body via temp file: a grown graph (result history) exceeds ARG_MAX as argv
+    rf_body=$(mktemp)
+    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/workflows/$wf_id" \
       | python3 -c '
 import json, sys
 wf = json.load(sys.stdin)
@@ -602,9 +611,10 @@ sys.stdout.write(json.dumps({
     "nodes": wf.get("nodes", []),
     "edges": wf.get("edges", []),
     "force": True,
-}))')
+}))' > "$rf_body"
     resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
-      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "$body")
+      -X POST "$BASE/workflows/$wf_id/execute" --data-binary "@$rf_body")
+    rm -f "$rf_body"
     code=$(printf '%s' "$resp" | tail -n1)
     printf '%s\n' "$(printf '%s' "$resp" | sed '$d')"
     case "$code" in
@@ -825,6 +835,13 @@ sys.stdout.write(json.dumps({
 
   credits)
     curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "$BASE/developer/usage"
+    ;;
+
+  estimate)
+    # wf.sh estimate <workflowId> — predicted credit cost of a run, per node.
+    id="${1:?usage: wf.sh estimate <workflowId>}"
+    curl "${CURL_FLAGS[@]}" -X POST "${AUTH[@]}" -H 'Content-Type: application/json' \
+      -d '{}' "$BASE/workflows/$id/estimate"
     ;;
 
   ""|-h|--help|help)
