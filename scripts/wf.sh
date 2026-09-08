@@ -360,9 +360,16 @@ case "$cmd" in
         send="$tmp"
       fi
     fi
-    curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+    resp=$(wf_curl "${AUTH[@]}" "${CT[@]}" \
       -X POST "$BASE/workflows" \
-      --data-binary "@$send"
+      --data-binary "@$send")
+    code=$(printf '%s' "$resp" | tail -n1)
+    body=$(printf '%s' "$resp" | sed '$d')
+    printf '%s\n' "$body"
+    case "$code" in
+      2*) ;;
+      *) echo "create FAILED (HTTP $code): check the response before running or retrying." >&2; exit 1 ;;
+    esac
     ;;
 
   update)
