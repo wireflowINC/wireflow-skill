@@ -9,6 +9,11 @@ API key.
 
 Full docs, install guide, and examples: **<https://wireflow.ai/skill>**
 
+**Open Flow preview:** an optional [creative-direction guide](references/open-flow.md)
+and [reproducible motion concept](examples/open-flow-launch/README.md).
+The existing skill name, installation, and commands are unchanged. The example
+is a local design preview; its Wireflow production run is still to be verified.
+
 ## What this is
 
 A Claude Code skill — a small bundle of instructions, reference docs, and
