@@ -273,18 +273,27 @@ Always based on a registered template — call
 **The nodeType is `video:remotion`, not `compose:remotion`.** Older docs
 may reference `compose:remotion` — it's wrong.
 
-**Use the default input handles.** The canvas library declares exactly
-three input ports for every `video:remotion` node:
+**Input handles are dynamic, and you declare the ones you wire.** The
+catalog seeds four base ports on every `video:remotion` node
+(`hookImage` IMAGE, `avatarVideo` VIDEO, `text` TEXT, `captions` JSON) and
+the server adds `audio` when you wire it. Beyond those, the node's ports
+come from the composition itself:
 
-- `hookImage` (IMAGE) — the hero/cover image fed into the composition
-- `avatarVideo` (VIDEO) — the main speaker / character video
-- `text` (TEXT) — caption or any text passthrough
+- **Template mode**: the template's `inputMappings` (the server
+  materializes them on save).
+- **Scene-graph mode**: every `{{token}}` in the scene graph, and every
+  `$port:*` prop of a Block scene (its `blockInputMappings`).
 
-Target handles should be `in-hookImage`, `in-avatarVideo`, `in-text`.
-**Do not invent custom handle names** like `in-heroImage` or
-`in-speakerVideo` — BasedNode only renders the three handles declared
-above, so edges with custom targets will have nothing to attach to
-visually (and won't resolve inputs correctly).
+Declare each port you wire in `data.inputs` with the same id, then target
+`in-<id>`. A wired `audio` port becomes the composition's audio track at
+render time; you never hand-author `audioTrack`. Verified 2026-09-15 on a
+board with eight `$port:video` clip ports, two `$port:text` ports and
+`in-audio`, all wired from Import / Text nodes and resolved in the render.
+
+A handle that matches nothing (no template mapping, no `{{token}}`, no
+Block port, not declared in `data.inputs`) attaches to nothing on the
+canvas and resolves to `""` at render, so keep ids identical across the
+Block schema, the `{{token}}`, `data.inputs` and the edge.
 
 See `references/remotion-templates.md` for full details on mapping
 template `inputMappings` to the `config.props` shape.
@@ -390,18 +399,22 @@ Cause: one of two wrong fields.
 Symptom: edges targeting the Remotion node don't visually attach. The
 node shows no input circles on its left edge.
 
-Cause: `data.inputs` array was omitted, or custom handle names were
-invented (`in-heroImage`, `in-speakerVideo`, etc.).
+Cause: `data.inputs` was omitted, or the edge targets an id that no
+template mapping, scene-graph `{{token}}` or Block `$port:*` prop
+declares.
 
-**Fix:** declare the three canonical ports:
+**Fix:** declare every port you wire, base ports included:
 ```json
 "inputs": [
   { "id": "hookImage", "type": "IMAGE" },
   { "id": "avatarVideo", "type": "VIDEO" },
-  { "id": "text", "type": "TEXT" }
+  { "id": "text", "type": "TEXT" },
+  { "id": "audio", "type": "AUDIO" },
+  { "id": "clip1", "type": "VIDEO" }
 ]
 ```
-Target handles are then `in-hookImage`, `in-avatarVideo`, `in-text`.
+and reference the same ids from the composition (`"src": "{{clip1}}"`, or a
+Block prop `"clip1": "{{clip1}}"`). Target handles are `in-<id>`.
 
 ### LLM field names are snake_case
 `system_prompt`, `max_tokens`, `temperature` — not `systemPrompt`, not
@@ -495,8 +508,9 @@ use two parallel LLM calls that both read from the same angle input —
 don't make the user specify multiple parallel inputs, or you can't
 batch from a flat data source.
 
-### Use the default canvas handle names for `video:remotion`
-Always `hookImage` / `avatarVideo` / `text`. Never invent custom names.
-The canvas library only declares these three ports for every remotion
-node, regardless of what the underlying composition's `inputMappings`
-look like. Prop resolution happens separately via `config.props`.
+### Handle ids for `video:remotion` must match the composition
+A port id is valid when the composition declares it: a template
+`inputMapping`, a scene-graph `{{token}}`, or a Block `$port:*` prop.
+Declare it in `data.inputs` and wire `in-<id>`. Base ports `hookImage`,
+`avatarVideo`, `text`, `captions` and `audio` always exist. Ids invented
+with no declaration resolve to nothing.
