@@ -5,14 +5,20 @@
   "scripts": {
     "stills": "node render.mjs --stills",
     "render": "node render.mjs && node finish.mjs",
-    "prepare:block": "node prepare-block.mjs"
+    "prepare:block": "node prepare-block.mjs",
+    "film:assets": "node film-assets.mjs",
+    "film:stills": "node film-assets.mjs && node render-film.mjs --stills",
+    "film:render": "node film-assets.mjs && node render-film.mjs && node finish-film.mjs",
+    "film:prepare:block": "node prepare-film-block.mjs"
   },
   "license": "MIT",
   "type": "module",
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource/instrument-serif": "5.3.0",
+    "@remotion/bundler": "4.0.450",
     "@remotion/player": "4.0.450",
+    "@remotion/renderer": "4.0.450",
     "@sparticuz/chromium": "143.0.4",
     "esbuild": "0.28.2",
     "playwright-core": "1.63.0",

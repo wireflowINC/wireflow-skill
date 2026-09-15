@@ -1,4 +1,72 @@
-# Open Flow — first motion concept
+# Open Flow — Wireflow launch film
+
+The latest example recreates the supplied VEED reference's editorial motion language
+for Wireflow: white canvas, oversized sans/italic type, rounded creator cards,
+a fan of alternatives, kinetic captions, a moving gallery, and an indigo end card.
+It uses Wireflow's own existing landing-page demo footage. It includes **no VEED
+footage, music, logos, or source code**.
+
+## Reproduce the Wireflow film
+
+```bash
+cd examples/open-flow-launch
+npm ci
+npm run film:stills
+npm run film:render
+```
+
+Requires Node 20+, FFmpeg and a compatible Chromium (see platform requirements below).
+`film:assets` downloads the eight explicitly listed public videos in
+`film-assets.json` into ignored `public/wireflow/`. If the CDN blocks a scripted
+download, save those exact URLs from your browser into that folder and rerun.
+Downloads and renders make no generation API calls and spend no Wireflow credits.
+Missing clips fail the render; no placeholder is substituted.
+
+| Time | Beat |
+| --- | --- |
+| 0–3 s | Brand brief and prompt |
+| 3–6 s | Original creator becomes a new creator |
+| 6–9 s | Original, outfit and product variations |
+| 9–11.5 s | Frame-driven kinetic captions |
+| 11.5–15 s | Five moving creative cards |
+| 15–18 s | Wireflow / Open Flow end card |
+
+`WireflowFilm.tsx` is the editable composition. `FilmRoot.tsx` registers it;
+`render-film.mjs` uses Remotion's native renderer and `OffthreadVideo` for reliable
+video frames. The local renderer falls back to a loopback-only server when its
+container cannot enumerate network interfaces. Typography is embedded at render time.
+The original score is shared with the first concept below.
+
+Outputs:
+
+- `out/Wireflow-Launch-1080p.mp4`: 1920×1080 master, 30 fps, H.264/AAC, 18 seconds.
+- `out/Wireflow-Launch-Phone.mp4`: 1280×720, H.264 Main 3.1/AAC, optimized for download
+  and progressive playback using fast-start MP4 metadata.
+
+The prompt card is a motion-design illustration, not a screen recording of an
+agent completing the workflow. Existing footage was reused for this local render;
+this does **not** demonstrate fresh generation from a website and brand kit.
+A successful live Wireflow run remains a separate acceptance requirement.
+
+```bash
+npm run film:prepare:block
+```
+
+This writes `out/wireflow-film-block.json`, a self-contained Block import candidate
+with text props, font data and public media references. Import validation, cloud
+media access, font/audio parity and the finished editable board are unverified.
+The Block is silent; attach `out/original-score.wav` separately in the board.
+See the production verification steps below. Do not present this local render as
+an authenticated platform run or as a fresh generation benchmark.
+
+The repository's MIT license covers the new composition code and score. The linked
+Wireflow marketing clips retain their existing rights and are not relicensed here.
+For another brand, substitute approved footage. Dependency and font licenses remain
+in force.
+
+---
+
+## Earlier procedural product concept
 
 An 18-second launch-film concept: **Make it move → One idea → Every angle →
 Make it yours → Open Flow.** Dark backgrounds, Wireflow's indigo/teal palette,
