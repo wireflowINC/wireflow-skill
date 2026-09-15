@@ -165,6 +165,25 @@ wf_body_file() {
 # on stale/wrong cached data (the dogfooding footgun). Server sends
 # X-RateLimit-Reset (epoch), not Retry-After, so we use simple linear backoff.
 #   echoes: <body>\n<http_code>   (caller: code=$(tail -n1); body=$(sed '$d'))
+# wf_layout_repair <workflowId> <response-body>
+# layout.py places cards from ESTIMATED sizes; the server measures the rendered
+# card (an Import node showing a video is several times taller than its unrun
+# estimate), so a write can still come back with a `layout.overlap`
+# diagnostic. When it does, ask the server to arrange the board from measured
+# sizes (POST /workflows/{id}/layout, positions only) and say so on stderr.
+# Same opt-out as the pre-send layout: WF_SKIP_LAYOUT=1.
+wf_layout_repair() {
+  local id="$1" body="$2" moved
+  [ -n "${WF_SKIP_LAYOUT:-}" ] && return 0
+  printf '%s' "$body" | grep -q '"code":"layout.overlap"' || return 0
+  moved=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+    -X POST "$BASE/workflows/$id/layout" -d '{}' \
+    | python3 -c 'import json,sys
+try: d=json.load(sys.stdin); d=d.get("data") or d; print(d.get("moved","?"))
+except Exception: print("?")' 2>/dev/null)
+  echo "→ layout: the server reported overlapping cards; re-laid out from measured sizes (moved $moved)" >&2
+}
+
 wf_curl() {
   local tries=0 max="${WF_MAX_RETRIES:-4}" resp code
   while :; do
@@ -370,6 +389,10 @@ case "$cmd" in
       2*) ;;
       *) echo "create FAILED (HTTP $code): check the response before running or retrying." >&2; exit 1 ;;
     esac
+    new_id=$(printf '%s' "$body" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin); print((d.get("data") or d).get("id") or "")
+except Exception: print("")' 2>/dev/null)
+    [ -n "$new_id" ] && wf_layout_repair "$new_id" "$body"
     ;;
 
   update)
@@ -426,6 +449,7 @@ json.dump(d, open(sys.argv[2],"w"))' "$send" "$merged" && send="$merged"
       2*) ;;
       *) echo "✗ update FAILED (HTTP $code): write did NOT land — fix the error above before running anything downstream." >&2; exit 1 ;;
     esac
+    wf_layout_repair "$id" "$body"
     ;;
 
   patch-node)

@@ -82,6 +82,13 @@ def est_dims(node, measured=None):
        family in ('generate', 'edit', 'video', 'audio', 'process', 'talking'):
         h += 120                            # media/result preview allowance
     w = 300 if cat == 'input' else 340
+    if nt == 'input:image' and (cfg.get('imageUrl') or cfg.get('image')):
+        # An Import node that holds media draws its preview on the card: the
+        # server sizes a 1080p clip's card at 463px and a 720x1280 clip's at
+        # 971px (GET /workflows/{id} `dims`, 2026-09-15). The bare 100px guess
+        # stacked every import on top of the next; the server's measured
+        # layout repair in wf.sh create/update catches what this still misses.
+        h += 360
     return float(w), float(max(h, 96))
 
 
