@@ -275,9 +275,11 @@ may reference `compose:remotion` — it's wrong.
 
 **Input handles are dynamic, and you declare the ones you wire.** The
 catalog seeds four base ports on every `video:remotion` node
-(`hookImage` IMAGE, `avatarVideo` VIDEO, `text` TEXT, `captions` JSON) and
-the server adds `audio` when you wire it. Beyond those, the node's ports
-come from the composition itself:
+(`hookImage` IMAGE, `avatarVideo` VIDEO, `text` TEXT, `captions` JSON).
+`audio` is canonical too but is not seeded: declare it in `data.inputs`
+when you wire it (the server writes the `{{audio}}` track for you only
+when the scene graph is authored at `config.sceneGraph`). Beyond those,
+the node's ports come from the composition itself:
 
 - **Template mode**: the template's `inputMappings` (the server
   materializes them on save).
