@@ -9,7 +9,8 @@
     "film:assets": "node film-assets.mjs",
     "film:stills": "node film-assets.mjs && node render-film.mjs --stills",
     "film:render": "node film-assets.mjs && node render-film.mjs && node finish-film.mjs",
-    "film:prepare:block": "node prepare-film-block.mjs"
+    "film:prepare:block": "node prepare-film-block.mjs",
+    "film:board": "node wireflow-board.mjs"
   },
   "license": "MIT",
   "type": "module",

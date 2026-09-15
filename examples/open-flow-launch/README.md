@@ -49,15 +49,25 @@ this does **not** demonstrate fresh generation from a website and brand kit.
 A successful live Wireflow run remains a separate acceptance requirement.
 
 ```bash
-npm run film:prepare:block
+npm run film:prepare:block          # out/wireflow-film-block.json, no network
+WIREFLOW_API_KEY=wf_live_... npm run film:board            # editable board
+WIREFLOW_API_KEY=wf_live_... npm run film:board -- --render  # + platform MP4
 ```
 
-This writes `out/wireflow-film-block.json`, a self-contained Block import candidate
-with text props, font data and public media references. Import validation, cloud
-media access, font/audio parity and the finished editable board are unverified.
-The Block is silent; attach `out/original-score.wav` separately in the board.
-See the production verification steps below. Do not present this local render as
-an authenticated platform run or as a fresh generation benchmark.
+`prepare-film-block.mjs` turns `WireflowFilm.tsx` into a Block: the eight clips
+become `$port:video` ports, headline and CTA become `$port:text` ports, and both
+typefaces are embedded in the source. `wireflow-board.mjs` then uploads the score
+from `score.mjs`, creates a board with one Import node per clip, an Import for the
+score, two Text nodes and the Video Editor, compiles the Block through
+`POST /api/v1/blocks`, writes the scene graph, and arranges the board. With
+`--render` it runs the board and prints the MP4 the platform rendered.
+
+Verified 2026-09-15 on board `cmu2j0rp1000hle046wpj79xs`: 1920x1080, 30 fps,
+540 frames, H.264 with the score as AAC, about 90 s and $0.02 of Lambda time per
+render, zero generation credits. Swapping a clip or the headline is a config patch
+on the matching node, no TSX edit. Known limit: a clip longer than 18 s makes the
+platform extend the block scene to the clip's length (blank tail); keep swapped
+clips at or under 18 s until that is fixed.
 
 The repository's MIT license covers the new composition code and score. The linked
 Wireflow marketing clips retain their existing rights and are not relicensed here.
