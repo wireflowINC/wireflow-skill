@@ -905,9 +905,37 @@ json.dump({
           m4a)      mime=audio/mp4 ;;
           *)        mime=application/octet-stream ;;
         esac
-        resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" \
-          -X POST "$BASE/media/upload" \
-          -F "file=@$src;type=$mime") ;;
+        # Vercel caps a function body at 4.5MB, so anything over ~4MB goes
+        # through the presigned door (up to 25MB): mint a url, PUT the bytes
+        # with exactly the signed headers, then finalize.
+        bytes=$(wc -c < "$src" | tr -d ' ')
+        if [ "$bytes" -gt 4000000 ]; then
+          mint=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+            -X POST "$BASE/media/upload-url" \
+            -d "$(jq -nc --arg t "$mime" --argjson b "$bytes" --arg f "$(basename "$src")" \
+              '{contentType:$t,bytes:$b,filename:$f}')")
+          m=$(printf '%s' "$mint" | jq -c '.data // .')
+          put_url=$(printf '%s' "$m" | jq -r '.uploadUrl // empty')
+          media_id=$(printf '%s' "$m" | jq -r '.mediaId // empty')
+          if [ -z "$put_url" ] || [ -z "$media_id" ]; then
+            printf '%s\n' "$mint" >&2; exit 1
+          fi
+          hdrs=()
+          while IFS= read -r h; do [ -n "$h" ] && hdrs+=(-H "$h"); done \
+            < <(printf '%s' "$m" | jq -r '.headers // {} | to_entries[] | "\(.key): \(.value)"')
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "$put_url" "${hdrs[@]}" --data-binary "@$src")
+          case "$code" in
+            2*) ;;
+            *) echo "upload PUT failed (HTTP $code)" >&2; exit 1 ;;
+          esac
+          resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+            -X POST "$BASE/media/upload-url/complete" \
+            -d "$(jq -nc --arg id "$media_id" '{mediaId:$id}')")
+        else
+          resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" \
+            -X POST "$BASE/media/upload" \
+            -F "file=@$src;type=$mime")
+        fi ;;
     esac
     # Print just the CDN url (the point of the command). On error, dump the
     # raw JSON to stderr and fail so callers see what went wrong.
