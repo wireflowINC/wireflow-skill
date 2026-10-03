@@ -178,7 +178,10 @@ url=$(bash scripts/wf.sh upload https://example.com/logo.png)  # rehost a remote
 ```
 
 - Accepts a local file path **or** a remote URL (it rehosts it). Images, video,
-  and audio up to 25MB.
+  and audio up to 25MB. Local files over 4MB automatically go through the
+  presigned flow (`/media/upload-url`, PUT to storage, `/complete`) because the
+  inline door is capped by the platform's ~4.5MB body limit; errors name the
+  failing step. SVG and fonts only work inline (small).
 - Prints **only** the public URL on success (so `$(...)` capture works); on
   error it prints the raw JSON to stderr and exits non-zero.
 - `bash scripts/wf.sh media` lists what you've uploaded (upload once, reuse the
