@@ -264,7 +264,18 @@ The nodes carry their cached `output`/`result` (fetch them with
 `GET /workflows/:id`), which is what lets the executor skip the upstream gens.
 The workflow must be active. A server-side credit pre-check still runs.
 
-**Response:** `{ executionId, status }` — poll with the same poll endpoint.
+**Response:** `201` with
+`{ workflowId, batchId, executionId, executionRuns: [{ id, status, nodeRuns, ... }] }`.
+Poll `executionId` with the poll endpoint below. It is the same value as
+`executionRuns[0].id`. Deploys before wireflowINC/wireflow#2574 send only
+`executionRuns`, so read `executionId ?? executionRuns[0].id`. A resume call
+with nothing to do answers `200 { skipped: true, reason, executionId }`.
+Error responses carry no `executionId`.
+
+> ⚠️ **Never blind-retry `/execute`.** It does not deduplicate on an
+> `Idempotency-Key` (it only logs the key), so a retry after a timeout or a
+> failed parse starts a second run and bills again. Poll the id you have, or
+> check `GET /workflows/:id/executions`, before you retry.
 
 **Skill shortcut:** `wf.sh run-node <workflowId> <nodeId>` does the fetch +
 reshape + POST for you, then `wf.sh poll <executionId>`.
