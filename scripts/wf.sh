@@ -879,6 +879,7 @@ json.dump({
     # (product screenshot, logo, reference image) into a workflow. The printed
     # url is already on the executor allowlist, so wire it straight into an
     # input:image / input:video / compv3 node. Scope: workflows:write.
+    # Local files over 4MB switch to the presigned flow automatically (max 25MB).
     #   url=$(wf.sh upload /tmp/shot.png)   # -> https://cdn.wireflow.ai/uploads/...
     src="${1:?usage: wf.sh upload <file|url>}"
     case "$src" in
@@ -905,9 +906,49 @@ json.dump({
           m4a)      mime=audio/mp4 ;;
           *)        mime=application/octet-stream ;;
         esac
-        resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" \
-          -X POST "$BASE/media/upload" \
-          -F "file=@$src;type=$mime") ;;
+        bytes=$(wc -c < "$src" | tr -d ' ')
+        if [ "$bytes" -le 4194304 ]; then
+          resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" \
+            -X POST "$BASE/media/upload" \
+            -F "file=@$src;type=$mime")
+        else
+          # Over 4MB the inline door cannot work: Vercel rejects a request body
+          # past ~4.5MB (FUNCTION_PAYLOAD_TOO_LARGE) before our code runs. Use
+          # the presigned flow instead (up to 25MB): mint a url, PUT the bytes
+          # straight to storage, then finalize. Same response shape as inline.
+          [ "$mime" != application/octet-stream ] || mime=""
+          mint=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+            -X POST "$BASE/media/upload-url" \
+            -d "$(jq -nc --arg t "$mime" --argjson b "$bytes" --arg f "${src##*/}" \
+              '{bytes:$b,filename:$f} + (if $t == "" then {} else {contentType:$t} end)')")
+          if ! put_url=$(printf '%s' "$mint" | jq -re '.data.uploadUrl' 2>/dev/null); then
+            echo "upload failed at step 1 (POST /media/upload-url):" >&2
+            printf '%s\n' "$mint" >&2
+            exit 1
+          fi
+          media_id=$(printf '%s' "$mint" | jq -re '.data.mediaId') \
+            || { echo "upload failed at step 1: no mediaId in response" >&2; printf '%s\n' "$mint" >&2; exit 1; }
+          # Send EXACTLY the headers the server signed; storage rejects any other
+          # value with SignatureDoesNotMatch. No Authorization header here: the
+          # url is presigned and the bearer token must not go to storage.
+          put_hdrs=()
+          while IFS= read -r h; do put_hdrs+=(-H "$h"); done < <(
+            printf '%s' "$mint" | jq -r '.data.headers // {} | to_entries[] | "\(.key): \(.value)"')
+          put_out=$(curl -sS -L -X PUT "${put_hdrs[@]}" -H 'Expect:' \
+            -w '\n%{http_code}' --data-binary "@$src" "$put_url") \
+            || { echo "upload failed at step 2 (PUT to storage): curl error" >&2; exit 1; }
+          put_code="${put_out##*$'\n'}"
+          case "$put_code" in
+            2??) ;;
+            *) echo "upload failed at step 2 (PUT to storage): HTTP $put_code" >&2
+               printf '%s\n' "${put_out%$'\n'*}" >&2
+               exit 1 ;;
+          esac
+          resp=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
+            -X POST "$BASE/media/upload-url/complete" \
+            -d "$(jq -nc --arg m "$media_id" --arg f "${src##*/}" '{mediaId:$m,filename:$f}')") \
+            || { echo "upload failed at step 3 (POST /media/upload-url/complete): curl error" >&2; exit 1; }
+        fi ;;
     esac
     # Print just the CDN url (the point of the command). On error, dump the
     # raw JSON to stderr and fail so callers see what went wrong.
