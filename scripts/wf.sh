@@ -892,7 +892,7 @@ json.dump({
         # Derive the MIME from the extension and send it explicitly — curl -F
         # otherwise sends application/octet-stream, which some clients can't
         # recover from. (The server also infers from the extension as a fallback.)
-        case "${src##*.}" in
+        case "$(printf '%s' "${src##*.}" | tr '[:upper:]' '[:lower:]')" in
           jpg|jpeg) mime=image/jpeg ;;
           png)      mime=image/png ;;
           gif)      mime=image/gif ;;
@@ -920,7 +920,8 @@ json.dump({
           mint=$(curl "${CURL_FLAGS[@]}" "${AUTH[@]}" "${CT[@]}" \
             -X POST "$BASE/media/upload-url" \
             -d "$(jq -nc --arg t "$mime" --argjson b "$bytes" --arg f "${src##*/}" \
-              '{bytes:$b,filename:$f} + (if $t == "" then {} else {contentType:$t} end)')")
+              '{bytes:$b,filename:$f} + (if $t == "" then {} else {contentType:$t} end)')") \
+            || { echo "upload failed at step 1 (POST /media/upload-url): curl error" >&2; exit 1; }
           if ! put_url=$(printf '%s' "$mint" | jq -re '.data.uploadUrl' 2>/dev/null); then
             echo "upload failed at step 1 (POST /media/upload-url):" >&2
             printf '%s\n' "$mint" >&2
@@ -934,7 +935,7 @@ json.dump({
           put_hdrs=()
           while IFS= read -r h; do put_hdrs+=(-H "$h"); done < <(
             printf '%s' "$mint" | jq -r '.data.headers // {} | to_entries[] | "\(.key): \(.value)"')
-          put_out=$(curl -sS -L -X PUT "${put_hdrs[@]}" -H 'Expect:' \
+          put_out=$(curl -sS -L -X PUT ${put_hdrs[@]+"${put_hdrs[@]}"} -H 'Expect:' \
             -w '\n%{http_code}' --data-binary "@$src" "$put_url") \
             || { echo "upload failed at step 2 (PUT to storage): curl error" >&2; exit 1; }
           put_code="${put_out##*$'\n'}"
@@ -948,6 +949,11 @@ json.dump({
             -X POST "$BASE/media/upload-url/complete" \
             -d "$(jq -nc --arg m "$media_id" --arg f "${src##*/}" '{mediaId:$m,filename:$f}')") \
             || { echo "upload failed at step 3 (POST /media/upload-url/complete): curl error" >&2; exit 1; }
+          if ! printf '%s' "$resp" | jq -e '.data.url' >/dev/null 2>&1; then
+            echo "upload failed at step 3 (POST /media/upload-url/complete):" >&2
+            printf '%s\n' "$resp" >&2
+            exit 1
+          fi
         fi ;;
     esac
     # Print just the CDN url (the point of the command). On error, dump the
