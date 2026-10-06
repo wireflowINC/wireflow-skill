@@ -57,6 +57,9 @@ Auth:
 To get a newer version later, run
 `claude plugin update wireflow@wireflow`.
 
+Maintainers: bump `version` in `.claude-plugin/plugin.json` with every
+release, or `claude plugin update` will report that nothing changed.
+
 ## Install the skill only (git clone)
 
 ```bash
@@ -131,7 +134,8 @@ The plugin only sends your data to Wireflow.
 
 - The MCP server is Wireflow's hosted endpoint,
   `https://www.wireflow.ai/api/mcp`. You approve access on Wireflow's
-  consent screen and can revoke it from your Wireflow settings.
+  consent screen. To revoke it, run `/mcp`, pick the Wireflow server and
+  choose Clear authentication.
 - `scripts/wf.sh` calls the Wireflow REST API at
   `https://www.wireflow.ai/api/v1` with your `WIREFLOW_API_KEY`. Its
   `upload` verb sends the file or URL you give it to Wireflow, which hosts
