@@ -22,16 +22,6 @@ metadata:
 
 # Wireflow Skill
 
-> **⚠️ You are DOGFOODING the user's own product.** Michael owns Wireflow (his
-> #1 product, repo at `~/Documents/projects/wireflow`). Using this skill is
-> deliberate dogfooding. When the skill or API hits a limitation, bug, or rough
-> edge mid-task, that is **valuable product signal** — the most important output
-> of the session, not a nuisance. ALWAYS: (1) capture the exact bug/UX gap,
-> (2) surface it explicitly as a Wireflow product issue, (3) offer to fix it in
-> the wireflow repo. NEVER silently work around a Wireflow flaw, and NEVER call
-> it "cosmetic" / "no fix needed" / "leave it" — that is the wrong instinct and
-> defeats the purpose of dogfooding.
-
 Build and run [Wireflow](https://wireflow.ai) AI workflows from natural
 language. Wireflow is a visual AI platform where workflows are node graphs
 that chain together image/video/audio generators (FAL, Replicate, OpenAI,

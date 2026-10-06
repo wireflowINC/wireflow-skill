@@ -1,0 +1,29 @@
+{
+  "name": "wireflow",
+  "displayName": "Wireflow",
+  "version": "1.0.0",
+  "description": "Build and run Wireflow AI image, video and audio workflows from Claude.",
+  "author": {
+    "name": "Wireflow",
+    "url": "https://www.wireflow.ai"
+  },
+  "homepage": "https://wireflow.ai/skill",
+  "repository": "https://github.com/wireflowINC/wireflow-skill",
+  "license": "MIT",
+  "keywords": [
+    "wireflow",
+    "workflows",
+    "ai-image",
+    "ai-video",
+    "ai-audio",
+    "remotion",
+    "mcp",
+    "content-automation"
+  ],
+  "skills": ["./"],
+  "icon": "./assets/icon.png",
+  "documentationUrl": "https://www.wireflow.ai/docs",
+  "supportUrl": "https://www.wireflow.ai/contact",
+  "privacyPolicyUrl": "https://www.wireflow.ai/privacy",
+  "termsOfServiceUrl": "https://www.wireflow.ai/terms"
+}

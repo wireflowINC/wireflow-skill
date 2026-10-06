@@ -1,0 +1,14 @@
+{
+  "name": "wireflow",
+  "owner": {
+    "name": "Wireflow",
+    "url": "https://www.wireflow.ai"
+  },
+  "description": "The Wireflow plugin: build and run AI image, video and audio workflows from Claude.",
+  "plugins": [
+    {
+      "name": "wireflow",
+      "source": "./"
+    }
+  ]
+}
