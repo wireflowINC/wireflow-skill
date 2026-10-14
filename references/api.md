@@ -201,7 +201,7 @@ Response (everything nests under `data`):
     "estimateComplete": true,         // ⚠️ see caveat below
     "breakdown": [                    // one entry per billable node
       { "nodeId": "tp-reveal-i2v", "nodeLabel": "Reveal clip (i2v)",
-        "model": "bytedance/seedance-2.0/text-to-video",
+        "model": "video:seedance_2_5",  // the node's type
         "credits": 85, "unitCredits": 85, "iterations": 1,
         "unknownIterations": false, "fanOutUncertainty": "none" } ],
     "warnings": []
