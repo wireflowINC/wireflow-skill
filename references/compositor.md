@@ -285,7 +285,7 @@ template **once per item** and emits an **array of N images** on `out-image`.
   `output.count` = N, `output.failedItems` / `output._warnings.dataItems` flag any
   per-item problems (a data key matching no layer is reported, never a silent blank).
 - **Absent / non-array `data` → single render** (exact back-compat).
-- **Cost:** local @napi-rs/canvas render — **no FAL credits**. Capped at **50 items**,
+- **Cost:** local @napi-rs/canvas render — **no credits**. Capped at **50 items**,
   4 concurrent.
 - **Validate first:** `bash scripts/wf.sh check workflow.json` (graph-lint) checks the
   `in-data` edge and flags a data key that matches no template layer with a

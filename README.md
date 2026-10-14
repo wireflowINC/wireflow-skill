@@ -77,7 +77,7 @@ Open Claude in any directory and ask:
 ## What the skill can NOT do
 
 - **Ship new Remotion compositions.** Those are React code in the
-  Wireflow repo and require a Lambda bundle redeploy. The skill only
+  Wireflow repo and require a renderer redeploy. The skill only
   *configures* existing compositions via their input ports and props.
   If you need a genuinely new visual type, ask the Wireflow team to
   author it.

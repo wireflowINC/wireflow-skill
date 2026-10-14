@@ -57,7 +57,7 @@ There is also `triptych` (2-3 full-width bands that wipe in staggered).
 ## Verify your work for ~$0 before any paid render
 
 `POST /api/v1/render/remotion/preview` with `{ "sceneGraph": {...} }` renders
-a few sampled STILL frames (Lambda stills cost cents and no credits) and
+a few sampled STILL frames (stills cost no credits) and
 returns CDN URLs plus every validation issue:
 
 ```json

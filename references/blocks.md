@@ -101,7 +101,7 @@ tuned spring/stagger/easing — reuse before hand-rolling raw `text` scenes.
 - Palette discipline: ONE accent across all scenes reads as one piece;
   per-scene colors read as a template.
 
-**Determinism (hard rules — a non-deterministic block renders wrong on Lambda)**
+**Determinism (hard rules — a non-deterministic block renders wrong in the final render)**
 
 - Drive ALL animation from `useCurrentFrame()`. NO `requestAnimationFrame`, NO
   wall-clock (`Date.now`/`new Date`), NO unseeded `Math.random` at render time —

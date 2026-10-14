@@ -78,7 +78,7 @@ Each `inputMapping` tells you which prop is wireable from upstream:
 - `portType` — what kind of upstream output you can wire in (`IMAGE`,
   `VIDEO`, `AUDIO`, `TEXT`, `JSON`).
 
-Example edge wiring a FAL video generator into a template's shot slot:
+Example edge wiring a video generator into a template's shot slot:
 
 ```json
 {
