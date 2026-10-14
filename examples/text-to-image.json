@@ -1,6 +1,6 @@
 {
   "name": "Text to Image — nano_banana_2",
-  "description": "Simplest case: Text Input → FAL image generator.",
+  "description": "Simplest case: Text Input → image generator.",
   "tags": ["skill-example"],
   "isActive": true,
   "nodes": [
