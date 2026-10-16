@@ -101,15 +101,15 @@ tuned spring/stagger/easing — reuse before hand-rolling raw `text` scenes.
 - Palette discipline: ONE accent across all scenes reads as one piece;
   per-scene colors read as a template.
 
-**Determinism (hard rules — a non-deterministic block renders wrong on Lambda)**
+**Determinism (hard rules — a non-deterministic block renders wrong in the final render)**
 
 - Drive ALL animation from `useCurrentFrame()`. NO `requestAnimationFrame`, NO
   wall-clock (`Date.now`/`new Date`), NO unseeded `Math.random` at render time —
   precompute any randomness from an index/seed at module scope.
 - 3D: `@remotion/three` `ThreeCanvas` only, never r3f `useFrame`. Wrap async
   (fonts, remote images) in `delayRender`/`continueRender`. Use `OffthreadVideo`
-  for video. Media renders need a raised `timeoutInMilliseconds` +
-  `concurrencyPerLambda: 1` so the GL context doesn't time out.
+  for video. Media renders need a raised `timeoutInMilliseconds` and a
+  render concurrency of 1 so the GL context doesn't time out.
 
 **The see loop — never trust "JSON-valid == good"**
 

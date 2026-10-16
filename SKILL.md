@@ -2,8 +2,8 @@
 name: wireflow
 description: >
   Build and run Wireflow AI workflows via REST API — text→image, text→video,
-  audio, and multi-step creative pipelines using FAL models, LLMs, and Remotion
-  video compositions. No Wireflow codebase access required; authenticates with
+  audio, and multi-step creative pipelines using image, video and audio models,
+  LLMs, and Remotion video compositions. No Wireflow codebase access required; authenticates with
   a scoped API key.
 when_to_use: >
   Use when the user says "wireflow", asks to "build a workflow", "run a
@@ -34,8 +34,8 @@ metadata:
 
 Build and run [Wireflow](https://wireflow.ai) AI workflows from natural
 language. Wireflow is a visual AI platform where workflows are node graphs
-that chain together image/video/audio generators (FAL, Replicate, OpenAI,
-Anthropic, ElevenLabs) and render final output — including professional
+that chain together image/video/audio generators (OpenAI, Google, ByteDance,
+Kling, Anthropic, ElevenLabs) and render final output — including professional
 video via Remotion compositions.
 
 This skill lets any Claude instance (anywhere — local, cloud, any project)
@@ -91,8 +91,8 @@ When the user asks you to build or run a Wireflow workflow:
    user opens is clean — edited graphs are the main source of overlapping
    nodes.
 6. **Estimate** — `bash scripts/wf.sh estimate <id>` before any non-trivial
-   run: predicted total credits, per-node breakdown, provider cost in USD,
-   the balance, and a `sufficient` flag, computed from the actual graph.
+   run: predicted total credits, per-node breakdown, the balance, and a
+   `sufficient` flag, computed from the actual graph.
    Quote THIS number to the user, never a rule of thumb. If
    `estimateComplete` is false the total is a LOWER BOUND (see
    `references/api.md` for why).
@@ -113,9 +113,9 @@ When the user asks you to build or run a Wireflow workflow:
 >
 > Every poll response carries `nodeStates: [{ nodeId, label, status, error,
 > outputUrl, outputUrls, text, progress, requestId }]` — per-node `PENDING |
-> RUNNING | COMPLETED | FAILED` with the error string on a failure (a FAL
-> moderation rejection shows here as `FAILED` + the provider message, not a
-> silent hang), plus `progress` and the FAL `requestId` for support/debug.
+> RUNNING | COMPLETED | FAILED` with the error string on a failure (a
+> moderation rejection shows here as `FAILED` + the model's message, not a
+> silent hang), plus `progress` and the `requestId` for support/debug.
 > `outputUrl` is the **normalized** primary media URL across every output shape
 > — a node's raw `output` is inconsistent (`output.url` on some models,
 > `output.images[0].url` on others, string vs object), so prefer
@@ -226,8 +226,8 @@ Before running a workflow that ends in a `video:remotion` SceneGraph render
 bash scripts/wf.sh preview sceneGraph.json
 ```
 
-It validates the graph and renders ~3 sampled **still frames** on Lambda
-(cents, not FAL credits — no full video render), returning:
+It validates the graph and renders ~3 sampled **still frames** (no credits,
+no full video render), returning:
 
 - `frames[]` — CDN URLs of the sampled stills. Fetch them and actually look
   (caption contrast, off-screen titles, a Block showing a gray placeholder).
@@ -378,8 +378,8 @@ runs the whole video under the VO:
 { "prompt": "minimal melodic-trap, confident, emotional, no vocals",
   "duration_seconds": 19, "force_instrumental": true }
 ```
-Costs **$0.80 per bed** (flat — FAL bills $0.80/min rounded up, the node is
-capped at 60s). ⚠️ You can't ear-check audio — a human must LISTEN and approve
+Costs about **128 credits per bed** (billed per started minute, and the node
+is capped at 60s). ⚠️ You can't ear-check audio — a human must LISTEN and approve
 the bed before it ships.
 
 **Pipe MULTIPLE audio tracks (no literal URLs).** The `video:remotion` node has
@@ -628,7 +628,7 @@ Read these on demand when composing workflows:
   `anchor`), `type: "stack"` flow layout, `itemTemplate` + `variants`, `$runs`,
   `$gapBefore`, per-corner `cornerRadius` tuples and `$port:` refs all live
   there. Check its stamp before trusting anything else on that page about layout.
-- `examples/text-to-image.json` — simplest case (Text Input → FAL image gen)
+- `examples/text-to-image.json` — simplest case (Text Input → image generator)
 - `examples/text-to-video.json` — text prompt → image → Kling video
 - `examples/remotion-compose.json` — full pipeline ending in a Remotion
   rendered MP4
@@ -657,14 +657,14 @@ Do **not** trigger for:
 ## What you can't do via this skill
 
 - **Ship new Remotion compositions.** Compositions are React code that
-  lives in the Wireflow repo and requires a Lambda bundle redeploy. The
+  lives in the Wireflow repo and requires a renderer redeploy. The
   skill only *configures* existing compositions via `defaultProps` and
   input ports. If the user needs a genuinely new visual type, tell them
   to ask the Wireflow team to author it (or vibe-code it themselves in
   the wireflow repo — an auto-deploy GitHub Action ships it ~2 min after
   merge).
-- **List all FAL models.** The registry is ~200+ models and lives in the
-  repo. If the user needs a specific model, call
+- **List every model by heart.** The registry is ~200+ models and lives in
+  the repo. If the user needs a specific model, call
   `POST /workflows/generate/stream` with a prompt describing what they
   want — Wireflow's generator picks the right model automatically.
 - **Edit the prompt of a running execution.** Workflow executions
@@ -676,8 +676,7 @@ Do **not** trigger for:
 Every run costs credits against the user's Wireflow account. **Do not guess
 costs from rules of thumb — ask the API.** `bash scripts/wf.sh estimate <id>`
 (POST /workflows/{id}/estimate) returns the predicted total, a per-node
-breakdown, the provider cost in USD, the account balance, and a `sufficient`
-flag, all computed from the actual graph. Quote THAT number to the user.
+breakdown, the account balance, and a `sufficient` flag, all computed from the actual graph. Quote THAT number to the user.
 
 Before running expensive workflows (per the estimate), confirm with the user.
 `bash scripts/wf.sh credits` shows the raw balance/usage.

@@ -195,14 +195,13 @@ Response (everything nests under `data`):
 { "data": {
     "workflowId": "cm…",
     "estimatedCredits": 138,          // total predicted credits for one run
-    "estimatedProviderCostUsd": 1.02, // upstream provider cost in USD
     "availableCredits": 9857,
     "creditSource": "user:1",
     "sufficient": true,               // balance covers the estimate
     "estimateComplete": true,         // ⚠️ see caveat below
     "breakdown": [                    // one entry per billable node
       { "nodeId": "tp-reveal-i2v", "nodeLabel": "Reveal clip (i2v)",
-        "model": "bytedance/seedance-2.0/text-to-video",
+        "model": "video:seedance_2_5",  // the node's type
         "credits": 85, "unitCredits": 85, "iterations": 1,
         "unknownIterations": false, "fanOutUncertainty": "none" } ],
     "warnings": []
@@ -378,8 +377,8 @@ curl -H "Authorization: Bearer $WIREFLOW_API_KEY" \
   credit balance before and after expensive runs via `/developer/usage`.
 - **The ledger is the truth.** Per-node billing happens at execution time
   from the model's real pricing dimensions (duration, resolution, variant).
-  The `costUsd` field in the public node catalog is display metadata; it is
-  NOT the billing engine. Never conclude "this node bills zero" or "found a
+  The `estimatedCredits` in the public node catalog is a default-run estimate;
+  it is NOT the billing engine. Never conclude "this node bills zero" or "found a
   pricing leak" from a catalog read. If a bill looks wrong, report the
   executionId and the observed charge and let a human check the ledger.
 - **Per-second models multiply.** A talking-avatar render is priced per

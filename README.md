@@ -9,9 +9,11 @@ API key.
 
 Full docs, install guide, and examples: **<https://wireflow.ai/skill>**
 
+Want a launch film in one command? See Open Flow: https://github.com/wireflowINC/open-flow
+
 ## What this is
 
-A Claude Code skill — a small bundle of instructions, reference docs, and
+A Claude Code skill, a small bundle of instructions, reference docs, and
 helper scripts that teach any Claude instance how to use the Wireflow
 REST API on your behalf. No Wireflow codebase access required.
 
@@ -57,27 +59,27 @@ Open Claude in any directory and ask:
 
 ## What's in the bundle
 
-- `SKILL.md` — skill manifest + core loop + trigger words
-- `references/api.md` — full REST API reference with curl examples
-- `references/workflow-schema.md` — node + edge JSON shape, common
+- `SKILL.md`, skill manifest + core loop + trigger words
+- `references/api.md`, full REST API reference with curl examples
+- `references/workflow-schema.md`, node + edge JSON shape, common
   patterns, rules that bite
-- `references/remotion-templates.md` — how to construct `compose:remotion`
+- `references/remotion-templates.md`, how to construct `compose:remotion`
   nodes from template specs
-- `scripts/wf.sh` — single dispatcher for common API operations
+- `scripts/wf.sh`, single dispatcher for common API operations
   (templates, create, run, poll, list, duplicate, patch-node, credits).
   `patch-node <id> <nodeId> '{"config":{"prompt":"new text"}}'` changes one
   node's config/label/position without round-tripping the whole graph. Its
   `check` gate
   (and the gate inside `create`/`update`/`organize`) graph-lints the workflow
-  even without the repo, via the server's `/workflows/lint` endpoint — so the
+  even without the repo, via the server's `/workflows/lint` endpoint, so the
   "no codebase access required" promise holds.
-- `examples/` — working workflow JSONs: text→image, text→video,
+- `examples/`, working workflow JSONs: text→image, text→video,
   image + audio → Remotion render
 
 ## What the skill can NOT do
 
 - **Ship new Remotion compositions.** Those are React code in the
-  Wireflow repo and require a Lambda bundle redeploy. The skill only
+  Wireflow repo and require a renderer redeploy. The skill only
   *configures* existing compositions via their input ports and props.
   If you need a genuinely new visual type, ask the Wireflow team to
   author it.
@@ -90,4 +92,8 @@ Open Claude in any directory and ask:
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT, see [LICENSE](./LICENSE).
+
+## Want us to make your launch video?
+
+[Get a free media plan](https://www.wireflow.ai/startups?utm_source=github&utm_medium=readme&utm_campaign=wireflow-skill).
