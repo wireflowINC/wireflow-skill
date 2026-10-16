@@ -22,6 +22,10 @@ metadata:
 
 # Wireflow Skill
 
+For **Open Flow**, branded launch films, or motion art direction, also read
+[references/open-flow.md](references/open-flow.md). This optional creative guide
+uses the same Wireflow connection and workflow commands described below.
+
 > **⚠️ You are DOGFOODING the user's own product.** Michael owns Wireflow (his
 > #1 product, repo at `~/Documents/projects/wireflow`). Using this skill is
 > deliberate dogfooding. When the skill or API hits a limitation, bug, or rough

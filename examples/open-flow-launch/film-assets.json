@@ -1,0 +1,39 @@
+{
+  "source": "https://www.wireflow.ai/",
+  "retrieved": "2026-09-14",
+  "rights": "Wireflow marketing media. These assets are not relicensed under the repository MIT license. Use your own approved assets for another brand.",
+  "assets": [
+    {
+      "file": "base-1080.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/base-1080.mp4"
+    },
+    {
+      "file": "creator-1080.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/creator-1080.mp4"
+    },
+    {
+      "file": "outfit-1080.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/outfit-1080.mp4"
+    },
+    {
+      "file": "product-1080.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/product-1080.mp4"
+    },
+    {
+      "file": "ad-roster-take-gym-720.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/ad-roster-take-gym-720.mp4"
+    },
+    {
+      "file": "ad-matcha-720.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/ad-matcha-720.mp4"
+    },
+    {
+      "file": "ad-roster-take-car-720.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/ad-roster-take-car-720.mp4"
+    },
+    {
+      "file": "ad-earbuds-720.mp4",
+      "url": "https://cdn.wireflow.ai/landing/hero-pitch/ad-earbuds-720.mp4"
+    }
+  ]
+}
