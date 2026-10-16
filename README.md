@@ -3,9 +3,9 @@
 Make an 18 second launch film for your product from 8 clips and a headline.
 Open source, rendered in the cloud.
 
-[![The Open Flow launch film. Click to watch it with sound.](assets/open-flow-film.gif)](https://cdn.wireflow.ai/videos/remotion/22491/s77r1uo4e1.mp4)
+[![The Open Flow launch film. Click to watch it with sound.](assets/open-flow-film.gif)](https://cdn.wireflow.ai/videos/remotion/22491/wo4mecwh84.mp4)
 
-This film came out of the command below with no options. [Watch it with sound](https://cdn.wireflow.ai/videos/remotion/22491/s77r1uo4e1.mp4) (1920x1080, 18 seconds).
+This film came out of the command below with no options. [Watch it with sound](https://cdn.wireflow.ai/videos/remotion/22491/wo4mecwh84.mp4) (1920x1080, 18 seconds).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
