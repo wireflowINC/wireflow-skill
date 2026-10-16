@@ -1,151 +1,119 @@
-# Open Flow — Wireflow launch film
+# Open Flow launch film
 
-The latest example recreates the supplied VEED reference's editorial motion language
-for Wireflow: white canvas, oversized sans/italic type, rounded creator cards,
-a fan of alternatives, kinetic captions, a moving gallery, and an indigo end card.
-It uses Wireflow's own existing landing-page demo footage. It includes **no VEED
-footage, music, logos, or source code**.
+An 18 second launch film built from 8 clips, a headline, a brand name and a
+call to action. Wireflow renders it in the cloud. You get an MP4 and an
+editable board.
 
-## Reproduce the Wireflow film
+## Run it
+
+Node 20 or newer, no `npm install`:
 
 ```bash
-cd examples/open-flow-launch
+export WIREFLOW_API_KEY="wf_live_..."   # free key: see below
+node film.mjs --brand "Acme" --headline "Launch day. Every version." --cta "acme.com" --clips ./my-clips
+```
+
+From the repo root the same thing is `npm run film -- <options>`. Run
+`node film.mjs --help` for every option. With no options you get the demo film.
+
+The key comes from the
+[Wireflow API keys page](https://www.wireflow.ai/settings?tab=api-keys&section=api-keys&utm_source=github&utm_medium=readme&utm_campaign=open-flow).
+It needs `workflows:read`, `workflows:write`, `workflows:execute` and
+`executions:read`. Read access is ticked for you, so tick the other two.
+
+What you see:
+
+```
+Signed in to Wireflow as you@example.com (60 credits)
+  uploading clip 1/4 1.mp4... done
+  ...
+Board ready: https://www.wireflow.ai/flow/<id>
+Cost estimate: 0 credits. Rendering (about 2 to 4 minutes)...
+.............
+
+Done in 117s. Credits used: 0.
+Your film: https://cdn.wireflow.ai/videos/remotion/<you>/<render>.mp4
+Edit it:   https://www.wireflow.ai/flow/<id>
+```
+
+## What each clip does
+
+| Time | Scene | Clips on screen |
+| --- | --- | --- |
+| 0 to 3 s | The brief: "Start with one idea." Your CTA shows in the prompt card. | none |
+| 3 to 6 s | "Choose your creator." | 1, 2, 5 |
+| 6 to 9 s | "Make it your own." | 1, 2, 3, 4 |
+| 9 to 11.5 s | "Give every word a beat." Kinetic captions. | 1 |
+| 11.5 to 15 s | Five moving cards with your headline. | 1, 5, 6, 7, 8 |
+| 15 to 18 s | End card: your brand name and CTA button. | none |
+
+Clips sit in tall rounded cards and are cropped to fill them, so phone video
+works best. Each card shows a few seconds, so 3 to 15 second clips are plenty.
+A longer clip is fine: the film stays 18 seconds. Give fewer than 8 clips and
+they repeat in order. Files: mp4, mov, m4v or webm, up to 100MB each. You can
+also pass links: `--clips https://example.com/a.mp4,https://example.com/b.mp4`.
+
+## What `film.mjs` does
+
+Each step is one call to the Wireflow API with your key:
+
+1. `GET /me` to check the key and show your balance.
+2. Uploads each clip to Wireflow's CDN (`POST /media/upload`, or a signed
+   upload for files over 4MB).
+3. `POST /workflows` creates the board: 8 Import nodes (clips), 1 Import node
+   (music), 3 Text nodes (headline, CTA, brand) and a Video Editor node
+   holding the film as one Block scene. Every clip and line is a port on that
+   node, wired from its input node.
+4. `POST /workflows/{id}/layout` lays the board out.
+5. `POST /workflows/{id}/estimate` checks the run costs 0 credits. If it
+   ever doesn't, the script stops before running anything.
+6. `POST /workflows/{id}/execute` runs the film node, then it polls until the
+   MP4 is ready (8 seconds between checks, 15 minute limit).
+
+Free keys can make 10 API calls a minute. When the script hits that, it
+waits and keeps going.
+
+## The Block
+
+`WireflowFilm.tsx` is a normal Remotion composition.
+`prepare-film-block.mjs` turns it into a Wireflow Block: the 8 clips become
+`$port:video` ports, headline, CTA and brand become `$port:text` ports, and
+the two fonts in `fonts/` get embedded so the film looks the same in the
+editor and in the cloud. `node prepare-film-block.mjs` writes the result to
+`out/wireflow-film-block.json` so you can read it (no network calls).
+
+Wireflow hosts one built copy of that Block. Its id is in
+`hosted-block.json`, and every board `film.mjs` makes points at it. Uploading
+new Block code to Wireflow is open to the Wireflow team only for now, so if
+you change the TSX, render it on your own machine (below). Maintainers
+refresh the hosted copy with `node film.mjs --publish-block --no-render`
+and commit the new `hosted-block.json`.
+
+## Render on your own machine
+
+Needs FFmpeg and a Chromium browser. On Linux x64 the pinned
+`@sparticuz/chromium` package is used; anywhere else set
+`REMOTION_BROWSER_EXECUTABLE` (on a Mac, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`).
+
+```bash
 npm ci
-npm run film:stills
-npm run film:render
+npm run film:stills    # 6 PNG frames in out/
+npm run film:render    # out/Wireflow-Launch-1080p.mp4 and a smaller phone cut
 ```
 
-Requires Node 20+, FFmpeg and a compatible Chromium (see platform requirements below).
-`film:assets` downloads the eight explicitly listed public videos in
-`film-assets.json` into ignored `public/wireflow/`. If the CDN blocks a scripted
-download, save those exact URLs from your browser into that folder and rerun.
-Downloads and renders make no generation API calls and spend no Wireflow credits.
-Missing clips fail the render; no placeholder is substituted.
+`film-assets.mjs` downloads the 8 demo clips listed in `film-assets.json` into
+`public/wireflow/` (ignored by git). `score.mjs` writes the original score,
+made from code with no samples. Local renders make no Wireflow API calls and
+use no credits.
 
-| Time | Beat |
-| --- | --- |
-| 0–3 s | Brand brief and prompt |
-| 3–6 s | Original creator becomes a new creator |
-| 6–9 s | Original, outfit and product variations |
-| 9–11.5 s | Frame-driven kinetic captions |
-| 11.5–15 s | Five moving creative cards |
-| 15–18 s | Wireflow / Open Flow end card |
+## Rights
 
-`WireflowFilm.tsx` is the editable composition. `FilmRoot.tsx` registers it;
-`render-film.mjs` uses Remotion's native renderer and `OffthreadVideo` for reliable
-video frames. The local renderer falls back to a loopback-only server when its
-container cannot enumerate network interfaces. Typography is embedded at render time.
-The original score is shared with the first concept below.
+The composition code and the score are MIT, like the rest of the repo. Inter
+and Instrument Serif are under the SIL Open Font License (see
+`fonts/OFL-*.txt`). The demo clips are Wireflow marketing footage and are not
+relicensed here; use your own clips for your own film.
 
-Outputs:
+## Want us to make it for you?
 
-- `out/Wireflow-Launch-1080p.mp4`: 1920×1080 master, 30 fps, H.264/AAC, 18 seconds.
-- `out/Wireflow-Launch-Phone.mp4`: 1280×720, H.264 Main 3.1/AAC, optimized for download
-  and progressive playback using fast-start MP4 metadata.
-
-The prompt card is a motion-design illustration, not a screen recording of an
-agent completing the workflow. Existing footage was reused for this local render;
-this does **not** demonstrate fresh generation from a website and brand kit.
-A successful live Wireflow run remains a separate acceptance requirement.
-
-```bash
-npm run film:prepare:block          # out/wireflow-film-block.json, no network
-WIREFLOW_API_KEY=wf_live_... npm run film:board            # editable board
-WIREFLOW_API_KEY=wf_live_... npm run film:board -- --render  # + platform MP4
-```
-
-`prepare-film-block.mjs` turns `WireflowFilm.tsx` into a Block: the eight clips
-become `$port:video` ports, headline and CTA become `$port:text` ports, and both
-typefaces are embedded in the source. `wireflow-board.mjs` then uploads the score
-from `score.mjs`, creates a board with one Import node per clip, an Import for the
-score, two Text nodes and the Video Editor, compiles the Block through
-`POST /api/v1/blocks`, writes the scene graph, and arranges the board. With
-`--render` it runs the board and prints the MP4 the platform rendered.
-
-Verified 2026-09-15 on board `cmu2j0rp1000hle046wpj79xs`: 1920x1080, 30 fps,
-540 frames, H.264 with the score as AAC, about 90 s and $0.02 of Lambda time per
-render, zero generation credits. Swapping a clip or the headline is a config patch
-on the matching node, no TSX edit. Known limit: a clip longer than 18 s makes the
-platform extend the block scene to the clip's length (blank tail); keep swapped
-clips at or under 18 s until that is fixed.
-
-The repository's MIT license covers the new composition code and score. The linked
-Wireflow marketing clips retain their existing rights and are not relicensed here.
-For another brand, substitute approved footage. Dependency and font licenses remain
-in force.
-
----
-
-## Earlier procedural product concept
-
-An 18-second launch-film concept: **Make it move → One idea → Every angle →
-Make it yours → Open Flow.** Dark backgrounds, Wireflow's indigo/teal palette,
-editorial type, a procedural product illustration, and an original electronic score.
-
-This is a **local design preview**, not a verified end-to-end Wireflow run. `form.`
-is an original illustrative brand, not a client or a performance case study.
-No VEED footage, renderer, code, or recipes are included.
-
-## Reproduce the preview
-
-Requirements: Node 20+, FFmpeg on `PATH`, and a supported Chromium browser.
-Linux x64 uses the browser bundled with the pinned npm dependency. On another
-platform, set `REMOTION_BROWSER_EXECUTABLE` to an existing compatible executable.
-
-```bash
-cd examples/open-flow-launch
-npm ci
-npm run stills
-npm run render
-```
-
-The finished file is `out/open-flow-launch.mp4`: 1920×1080, 30 fps, 18 seconds,
-H.264/AAC. The local renderer seeks a Remotion Player to each exact frame and
-encodes screenshots with FFmpeg. Source and frame timing live in `Launch.tsx`;
-the score is `score.mjs`.
-Dependencies, extracted browser files, and outputs stay inside this example and
-are ignored by git. Installing the existing Wireflow skill does not install them.
-
-## Prepare for Wireflow
-
-```bash
-npm run prepare:block
-```
-
-This writes `out/wireflow-block.json`, containing source and a Zod module with
-embedded font defaults, for the inspected `POST /api/v1/blocks` contract. It
-**does not make a network request, create a block, or spend credits**.
-
-With an authenticated Wireflow session, the remaining verification is:
-
-1. Read current guidelines and schemas. Create a new draft board and use the
-   API's real `video:remotion` node shape.
-2. Submit the block candidate with `workflows:write` access, scoped to the new
-   board using `workflowId`. Inspect the returned errors/warnings and require
-   `renderable: true`; only use the returned `blockId`.
-3. Add a block scene lasting 540 frames in a 1920×1080, 30 fps scene graph.
-   Import the original score onto an audio node and wire it to the composition;
-   the Block itself is silent. Use the catalog's current audio handles.
-4. Preview representative frames. Compare typography, timing, and layout with
-   the local preview. Read the cost estimate and obtain any needed spend
-   authorization before a full run.
-5. Inspect the finished video, then return its output URL and editable board.
-
-The source contains no filesystem reads, `staticFile`, wall-clock animation, or
-relative imports. Fonts load before a frame is accepted. The `beats` export
-provides editor chapters. Cloud font handling, block bundling, board editability,
-audio wiring, cost, and full rendering remain **unverified** until that run.
-
-## Compatibility
-
-This example is opt-in. The repository name, root `name: wireflow` skill, existing
-installation command, scripts, API behavior, and current examples are retained.
-There is no rename, automatic migration, production deployment, or new MCP server.
-
-## Credits and licenses
-
-New example source, vector artwork, and procedural score follow the repository's
-MIT license. Inter and Instrument Serif come from pinned Fontsource packages and
-retain their SIL Open Font Licenses (see the packages' `LICENSE` files). Remotion
-and Chromium retain their own dependency licenses. Existing Wireflow colors were
-read from its landing-page design system. No outside media is required.
+[Get a free media plan](https://www.wireflow.ai/startups?utm_source=github&utm_medium=readme&utm_campaign=open-flow)
+and we'll make your launch video.

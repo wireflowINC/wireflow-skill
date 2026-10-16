@@ -15,6 +15,7 @@ export type FilmProps = {
   assetBase?: string;
   headline?: string;
   cta?: string;
+  brand?: string;
 };
 export const filmBeats = [
   { label: "The brief", from: 0, to: 90 },
@@ -22,7 +23,7 @@ export const filmBeats = [
   { label: "Your product", from: 180, to: 270 },
   { label: "Your words", from: 270, to: 345 },
   { label: "Every version", from: 345, to: 450 },
-  { label: "Wireflow", from: 450, to: 540 },
+  { label: "End card", from: 450, to: 540 },
 ];
 const white = "#fcfcfa",
   ink = "#202122",
@@ -223,7 +224,7 @@ function Signature({ light = false }: { light?: boolean }) {
     </div>
   );
 }
-function Brief() {
+function Brief({ cta }: { cta: string }) {
   const f = useCurrentFrame();
   const p = pop(f, 0, 30);
   const typed = "Make a launch film for my brand.";
@@ -297,7 +298,7 @@ function Brief() {
             </span>
           </div>
           <div style={{ display: "flex", gap: 12, marginTop: 47 }}>
-            <Pill style={{ fontSize: 21 }}>wireflow.ai</Pill>
+            <Pill style={{ fontSize: 21 }}>{cta}</Pill>
             <Pill style={{ fontSize: 21 }}>Brand kit ✓</Pill>
             <div
               style={{
@@ -593,7 +594,7 @@ function Montage({ base, headline }: { base: string; headline: string }) {
     </AbsoluteFill>
   );
 }
-function End({ cta }: { cta: string }) {
+function End({ cta, brand }: { cta: string; brand: string }) {
   const f = useCurrentFrame();
   return (
     <AbsoluteFill
@@ -613,13 +614,14 @@ function End({ cta }: { cta: string }) {
       >
         <div
           style={{
-            fontSize: 219,
+            fontSize: Math.min(219, Math.floor(2900 / Math.max(1, brand.length))),
             fontWeight: 700,
             letterSpacing: "-.075em",
             lineHeight: 1,
           }}
         >
-          Wireflow<span style={{ color: mint }}>.</span>
+          {brand.replace(/\.$/, "")}
+          <span style={{ color: mint }}>.</span>
         </div>
         <div
           style={{
@@ -666,6 +668,7 @@ export default function WireflowFilm({
   assetBase = "https://cdn.wireflow.ai/landing/hero-pitch/",
   headline = "One take. Every version.",
   cta = "wireflow.ai",
+  brand = "Wireflow",
 }: FilmProps) {
   const [h] = useState(() => delayRender("Loading film typography"));
   useEffect(() => {
@@ -694,7 +697,7 @@ export default function WireflowFilm({
       style={{ background: white, color: ink, fontFamily: sans }}
     >
       <Sequence from={0} durationInFrames={90}>
-        <Brief />
+        <Brief cta={cta} />
       </Sequence>
       <Sequence from={90} durationInFrames={90}>
         <Creator base={assetBase} />
@@ -709,7 +712,7 @@ export default function WireflowFilm({
         <Montage base={assetBase} headline={headline} />
       </Sequence>
       <Sequence from={450} durationInFrames={90}>
-        <End cta={cta} />
+        <End cta={cta} brand={brand} />
       </Sequence>
     </AbsoluteFill>
   );

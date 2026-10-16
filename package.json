@@ -1,0 +1,12 @@
+{
+  "name": "wireflow-skill",
+  "private": true,
+  "description": "Wireflow skill for Claude, plus Open Flow: an open source launch film you render in one command.",
+  "license": "MIT",
+  "scripts": {
+    "film": "node examples/open-flow-launch/film.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

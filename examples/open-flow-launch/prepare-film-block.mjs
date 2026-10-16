@@ -1,10 +1,10 @@
-// Turn WireflowFilm.tsx into a Wireflow Block candidate: eight `$port:video`
-// clip ports, `$port:text` headline and CTA ports, and the two typefaces
-// embedded in the source so the Block renders identically in the editor and
-// on Lambda. Writes out/wireflow-film-block.json; no network, no credits.
+// Turn WireflowFilm.tsx into a Wireflow Block: eight `$port:video` clip ports,
+// `$port:text` headline, CTA and brand ports, and the two typefaces (in
+// ./fonts, SIL OFL) embedded in the source so the Block renders the same in
+// the editor and in the cloud. No npm install, no network, no credits.
 //
-// This is the exact transform behind the 2026-09-15 platform render (board
-// cmu2j0rp1000hle046wpj79xs). `wireflow-board.mjs` posts the result.
+// `film.mjs` imports `block` and `CLIP_PORTS` from
+// here. Run it directly to write out/wireflow-film-block.json for inspection.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,18 +13,17 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(
   await readFile(path.join(root, "film-assets.json"), "utf8"),
 );
-const ASSET_BASE = "https://cdn.wireflow.ai/landing/hero-pitch/";
 // Order matches the `files` array the composition indexed; labels become port
-// labels on the canvas.
+// labels on the canvas. Clip 1 is on screen the longest.
 export const CLIP_PORTS = [
-  ["clip1", "Base take"],
-  ["clip2", "New creator"],
-  ["clip3", "New outfit"],
-  ["clip4", "Your product"],
-  ["clip5", "Gym ad"],
-  ["clip6", "Matcha ad"],
-  ["clip7", "Car ad"],
-  ["clip8", "Earbuds ad"],
+  ["clip1", "Clip 1: hero take"],
+  ["clip2", "Clip 2: second take"],
+  ["clip3", "Clip 3: variation"],
+  ["clip4", "Clip 4: product shot"],
+  ["clip5", "Clip 5: montage"],
+  ["clip6", "Clip 6: montage"],
+  ["clip7", "Clip 7: montage"],
+  ["clip8", "Clip 8: montage"],
 ].map(([id, label], i) => ({
   id,
   label,
@@ -34,12 +33,8 @@ export const CLIP_PORTS = [
 const font = async (p) =>
   "data:font/woff2;base64," +
   (await readFile(path.join(root, p))).toString("base64");
-const sansFont = await font(
-  "node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
-);
-const serifFont = await font(
-  "node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2",
-);
+const sansFont = await font("fonts/inter-latin-wght-normal.woff2");
+const serifFont = await font("fonts/instrument-serif-latin-400-italic.woff2");
 
 let source = await readFile(path.join(root, "WireflowFilm.tsx"), "utf8");
 const replace = (from, to) => {
@@ -54,14 +49,16 @@ replace(
   assetBase?: string;
   headline?: string;
   cta?: string;
+  brand?: string;
 };
 export const filmBeats = [`,
   `export type FilmProps = {
 ${CLIP_PORTS.map((c) => `  ${c.id}?: string;`).join("\n")}
   headline?: string;
   cta?: string;
+  brand?: string;
 };
-// Typography embedded so the block renders identically in the editor and on Lambda.
+// Typography embedded so the block renders the same in the editor and in the cloud.
 const SANS_FONT = ${JSON.stringify(sansFont)};
 const SERIF_FONT = ${JSON.stringify(serifFont)};
 const asText = (v: unknown, fallback: string) =>
@@ -114,6 +111,7 @@ ${CLIP_PORTS.map((c) => `    props.${c.id},`).join("\n")}
   ].map((c) => (isUrl(c) ? c : ""));
   const headline = asText(props.headline, "One take. Every version.");
   const cta = asText(props.cta, "wireflow.ai");
+  const brand = asText(props.brand, "Wireflow");
   const [h] = useState(() => delayRender("Loading film typography"));
   useEffect(() => {
     let live = true;
@@ -141,7 +139,7 @@ ${CLIP_PORTS.map((c) => `    props.${c.id},`).join("\n")}
       style={{ background: white, color: ink, fontFamily: sans }}
     >
       <Sequence from={0} durationInFrames={90}>
-        <Brief />
+        <Brief cta={cta} />
       </Sequence>
       <Sequence from={90} durationInFrames={90}>
         <Creator clips={clips} />
@@ -156,7 +154,7 @@ ${CLIP_PORTS.map((c) => `    props.${c.id},`).join("\n")}
         <Montage clips={clips} headline={headline} />
       </Sequence>
       <Sequence from={450} durationInFrames={90}>
-        <End cta={cta} />
+        <End cta={cta} brand={brand} />
       </Sequence>
     </AbsoluteFill>
   );
@@ -171,7 +169,8 @@ const schemaSource =
       `  ${c.id}: z.string().default(${JSON.stringify(c.url)}).describe('$port:video ${c.label}'),`,
   ).join("\n") +
   `\n  headline: z.string().max(45).default('One take. Every version.').describe('$port:text Closing headline'),` +
-  `\n  cta: z.string().max(30).default('wireflow.ai').describe('$port:text Call to action'),\n});\n`;
+  `\n  cta: z.string().max(30).default('wireflow.ai').describe('$port:text Call to action'),` +
+  `\n  brand: z.string().max(24).default('Wireflow').describe('$port:text Brand name on the end card'),\n});\n`;
 
 const bytes = Buffer.byteLength(source) + Buffer.byteLength(schemaSource);
 if (bytes > 256000) throw Error(`Block exceeds the 256000 byte bundler cap (${bytes})`);
@@ -180,14 +179,15 @@ export const block = {
   name: "open_flow_wireflow_launch",
   displayName: "Open Flow launch film",
   description:
-    "18-second white editorial Wireflow launch film: brief, creator swap, outfit and product variations, kinetic captions, moving cards, indigo end card. Eight swappable clips, headline and CTA ports.",
+    "18-second launch film: brief, creator swap, outfit and product variations, kinetic captions, moving cards, end card. Eight swappable clips plus headline, CTA and brand ports.",
   source,
   schemaSource,
 };
-await mkdir(path.join(root, "out"), { recursive: true });
-await writeFile(
-  path.join(root, "out/wireflow-film-block.json"),
-  JSON.stringify(block, null, 2) + "\n",
-);
-if (process.argv[1] === fileURLToPath(import.meta.url))
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await mkdir(path.join(root, "out"), { recursive: true });
+  await writeFile(
+    path.join(root, "out/wireflow-film-block.json"),
+    JSON.stringify(block, null, 2) + "\n",
+  );
   console.log(`Prepared out/wireflow-film-block.json (${bytes} bytes); no API calls or credit spend.`);
+}

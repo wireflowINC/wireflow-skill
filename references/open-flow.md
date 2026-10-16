@@ -1,4 +1,4 @@
-# Open Flow — creative direction for Wireflow
+# Open Flow: creative direction for Wireflow
 
 Use this optional guide when the user asks for an Open Flow example, a branded
 launch film, or art direction for a Wireflow composition. Existing workflow
@@ -39,7 +39,9 @@ from the current catalog; do not guess node handles or invent block IDs.
 
 For a new visual that the catalog cannot express, a self-contained Remotion Block
 can be prepared as source plus a Zod `Schema` module for `POST /api/v1/blocks`.
-Check the current endpoint contract and account access before submitting it.
+That endpoint is limited to Wireflow staff accounts for now (other keys get
+403 `block_authoring_restricted`), so for anyone else prefer library blocks
+(`GET /api/v1/blocks?renderable=1`) or the hosted Open Flow Block below.
 Author from the frame number, load fonts deterministically, use supported root
 imports, and export labeled `beats` for longer compositions. Keep content that
 users should change exposed as props/ports. Shared templates should be forked
@@ -59,10 +61,19 @@ labeled local design preview and import candidate, report the access limitation,
 and keep the production step explicitly pending. Do not report a local render as
 an end-to-end Wireflow result.
 
-## First example
+## First example: the Open Flow launch film
 
-[Open Flow launch concept](../examples/open-flow-launch/README.md) contains the
-18-second source, original procedural artwork and score, local rendering commands,
-and a payload preparation command. It uses no generated-media API and makes no
-advertising-performance claim. The production import is a separate verification
-step; local rendering does not prove it works on Wireflow's renderer.
+[examples/open-flow-launch](../examples/open-flow-launch/README.md) makes an
+18 second launch film from up to 8 clips plus a headline, brand name and CTA,
+in one command with only `WIREFLOW_API_KEY` set:
+
+```bash
+node examples/open-flow-launch/film.mjs --brand "Acme" --headline "Launch day. Every version." \
+  --cta "acme.com" --clips ./my-clips
+```
+
+It uploads the clips, builds an editable board (Import and Text nodes wired
+into one Video Editor node holding a hosted Block), checks the estimate is 0
+credits, runs the film node and prints the MP4 and board links. Swapping a clip
+or a line later is a node edit on the board plus a run of the film node, no
+TSX. Each render costs 0 credits and takes about 2 to 4 minutes.

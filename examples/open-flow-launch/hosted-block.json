@@ -1,0 +1,83 @@
+{
+  "blockId": "cmva8lh6x0039ia06opz8a2b7",
+  "bundledUrl": "https://cdn.wireflow.ai/blocks/633b81908c8e7b98.js",
+  "ports": [
+    {
+      "portId": "clip1",
+      "portType": "VIDEO",
+      "propPath": "clip1",
+      "required": false,
+      "portLabel": "Clip 1: hero take"
+    },
+    {
+      "portId": "clip2",
+      "portType": "VIDEO",
+      "propPath": "clip2",
+      "required": false,
+      "portLabel": "Clip 2: second take"
+    },
+    {
+      "portId": "clip3",
+      "portType": "VIDEO",
+      "propPath": "clip3",
+      "required": false,
+      "portLabel": "Clip 3: variation"
+    },
+    {
+      "portId": "clip4",
+      "portType": "VIDEO",
+      "propPath": "clip4",
+      "required": false,
+      "portLabel": "Clip 4: product shot"
+    },
+    {
+      "portId": "clip5",
+      "portType": "VIDEO",
+      "propPath": "clip5",
+      "required": false,
+      "portLabel": "Clip 5: montage"
+    },
+    {
+      "portId": "clip6",
+      "portType": "VIDEO",
+      "propPath": "clip6",
+      "required": false,
+      "portLabel": "Clip 6: montage"
+    },
+    {
+      "portId": "clip7",
+      "portType": "VIDEO",
+      "propPath": "clip7",
+      "required": false,
+      "portLabel": "Clip 7: montage"
+    },
+    {
+      "portId": "clip8",
+      "portType": "VIDEO",
+      "propPath": "clip8",
+      "required": false,
+      "portLabel": "Clip 8: montage"
+    },
+    {
+      "portId": "headline",
+      "portType": "TEXT",
+      "propPath": "headline",
+      "required": false,
+      "portLabel": "Closing headline"
+    },
+    {
+      "portId": "cta",
+      "portType": "TEXT",
+      "propPath": "cta",
+      "required": false,
+      "portLabel": "Call to action"
+    },
+    {
+      "portId": "brand",
+      "portType": "TEXT",
+      "propPath": "brand",
+      "required": false,
+      "portLabel": "Brand name on the end card"
+    }
+  ]
+}

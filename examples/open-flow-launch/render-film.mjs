@@ -13,10 +13,10 @@ const font = async (p) =>
 const inputProps = {
   assetBase: "/public/wireflow/",
   sansFont: await font(
-    "node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+    "fonts/inter-latin-wght-normal.woff2",
   ),
   serifFont: await font(
-    "node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2",
+    "fonts/instrument-serif-latin-400-italic.woff2",
   ),
 };
 // Some containers cannot enumerate interfaces. Keep the renderer explicitly on loopback.
