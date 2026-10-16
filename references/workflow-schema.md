@@ -40,7 +40,7 @@ on one node to an input port on another.
 Different from `data.nodeType`. React Flow uses the top-level `type`
 field to pick which component renders the node. Valid values:
 
-- **`"basedNode"`** — the default for ~everything (all FAL models, LLMs,
+- **`"basedNode"`** — the default for ~everything (all generation models, LLMs,
   inputs, compose, logic, utility)
 - **`"stickyNote"`** — **required** for `utility:sticky_note` nodes. If
   you set `type: "basedNode"` for a sticky note, it renders as a generic
@@ -98,7 +98,7 @@ use `type: "stickyNote"`. Otherwise use `type: "basedNode"`.
   `in-text`)
 
 The `<portId>` segment corresponds to the `id` field of the port in the
-node's `inputs` / `outputs` array, NOT a semantic name. For a FAL Kling
+node's `inputs` / `outputs` array, NOT a semantic name. For a Kling
 node with `inputs: [{ id: "image_url", type: "IMAGE" }]`, the target
 handle is `in-image_url` (not `in-image`).
 
@@ -116,7 +116,7 @@ into a Kling i2v video node looks like this:
 ```
 
 Both are IMAGE type, so the edge is valid even though the keys differ.
-Same pattern for wiring an LLM's `out-text` into a FAL image generator's
+Same pattern for wiring an LLM's `out-text` into an image generator's
 `in-prompt` — both TEXT, perfectly legal.
 
 ## Common node types
@@ -165,7 +165,7 @@ catalog, deprecated).
 Outputs: `out-image`, `out-media`, `out-url`. Wire downstream from **`out-media`**
 (its type follows the imported media: VIDEO for a clip, AUDIO for a sound).
 
-### `generate:<model>` — FAL / Replicate / etc. generator
+### `generate:<model>` — image generator
 
 Examples: `generate:nano_banana_2`, `generate:kling_1_6_pro`,
 `generate:imagen_3`, `generate:flux_pro_v1_1_ultra`,
@@ -217,7 +217,7 @@ model for you.
 ```
 
 Fields (all snake_case, NOT camelCase):
-- `model` — OpenRouter slug (e.g. `anthropic/claude-sonnet-4.5`,
+- `model` — model slug (e.g. `anthropic/claude-sonnet-4.5`,
   `openai/gpt-4o`, `google/gemini-2.0-flash-exp`)
 - `system_prompt` — not `systemPrompt`
 - `max_tokens`, `temperature` — standard
@@ -422,9 +422,9 @@ Block prop `"clip1": "{{clip1}}"`). Target handles are `in-<id>`.
 a config field.
 
 ### LLM node has wrong nodeType
-`llm:openrouter_router` is the correct nodeType for OpenRouter-routed
+`llm:openrouter_router` is the correct nodeType for general
 LLM calls. Not `llm:openai` or `llm:anthropic`. Set the specific model
-via `config.model` using the OpenRouter slug
+via `config.model` using the model slug
 (e.g. `anthropic/claude-sonnet-4.5`, `openai/gpt-4o`).
 
 ### `compose:remotion` does not exist
@@ -434,7 +434,7 @@ The correct nodeType is `video:remotion`. Any code or doc mentioning
 ### ElevenLabs voice field
 Accepts either a premade voice name from the enum (`Rachel`, `Charlie`,
 `Bella`, etc.) OR a voice_id. Do NOT pass decorated library names like
-`"Charlie - Deep, Confident, Energetic"` — FAL will reject them. When
+`"Charlie - Deep, Confident, Energetic"` — the model will reject them. When
 in doubt, pass a voice_id (28-char string from ElevenLabs).
 
 ### Kling model_version must match a real variant

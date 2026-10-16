@@ -716,7 +716,7 @@ json.dump({
     # null by hand. Reads the poll response's `nodeStates` [{nodeId,label,status,
     # error,outputUrl}]. Polls every 6s (safe under the 10/min API limit) and
     # backs off on a 429. On FAILED it prints the failing node's error (e.g. a
-    # FAL moderation rejection); on COMPLETED it prints the output URLs.
+    # moderation rejection); on COMPLETED it prints the output URLs.
     #   WF_WAIT_INTERVAL (default 6s), WF_WAIT_MAX_TICKS (default 200 = ~20 min).
     exec_id="${1:?usage: wf.sh wait <executionId>}"
     interval="${WF_WAIT_INTERVAL:-6}"
@@ -925,8 +925,8 @@ json.dump({
     ;;
 
   preview)
-    # Dry-run a SceneGraph: validates it, renders ~3 sampled STILL frames on
-    # Lambda (cents, not FAL credits — no full video render), and returns their
+    # Dry-run a SceneGraph: validates it, renders ~3 sampled STILL frames (no
+    # credits, no full video render), and returns their
     # CDN urls + diagnostics (validation repairs, placeholder blocks, duration).
     # LOOK at the frames and self-correct BEFORE paying for a full render.
     # Repo-free version of `wf.sh see`. Accepts a raw { fps,width,height,scenes }
@@ -948,9 +948,9 @@ json.dump({
     # Pull a render/output file. cdn.wireflow.ai 403s plain curl/python (edge
     # WAF user-agent block — infra-level, not fixable in the app), so route
     # through the app's allowlisted download proxy: it fetches server-side (no
-    # UA block) and needs no auth. Whitelisted hosts: cdn.wireflow.ai, fal.media,
-    # replicate.delivery, storage.googleapis.com, oai blob. For other hosts it
-    # falls back to a direct fetch with a browser UA.
+    # UA block) and needs no auth. It allowlists our CDN and the media hosts
+    # results come back on. For other hosts it falls back to a direct fetch
+    # with a browser UA.
     src="${1:?usage: wf.sh download <url> [out.file]}"
     out="${2:-$(basename "${src%%\?*}")}"
     origin="${BASE%/api/v1}"
