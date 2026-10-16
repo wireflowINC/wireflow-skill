@@ -117,7 +117,7 @@ EOF
 fi
 
 # -L so 301/308 redirects (wireflow.ai → www.wireflow.ai) don't swallow
-# API responses. Vercel preserves the method + body on 308 for POST.
+# API responses. The server preserves the method + body on 308 for POST.
 CURL_FLAGS=(-sS -L)
 AUTH=(-H "Authorization: Bearer $WIREFLOW_API_KEY")
 CT=(-H "Content-Type: application/json")
@@ -948,19 +948,18 @@ json.dump({
     # Pull a render/output file. cdn.wireflow.ai 403s plain curl/python (edge
     # WAF user-agent block — infra-level, not fixable in the app), so route
     # through the app's allowlisted download proxy: it fetches server-side (no
-    # UA block) and needs no auth. It allowlists our CDN and the media hosts
-    # results come back on. For other hosts it falls back to a direct fetch
+    # UA block) and needs no auth. It allowlists our CDN and the hosts results
+    # come back on. If the proxy refuses a url, fall back to a direct fetch
     # with a browser UA.
     src="${1:?usage: wf.sh download <url> [out.file]}"
     out="${2:-$(basename "${src%%\?*}")}"
     origin="${BASE%/api/v1}"
-    case "$src" in
-      *cdn.wireflow.ai/*|*cdn.atomu.ai/*|*fal.media/*|*replicate.delivery/*|*storage.googleapis.com/*|*oaidalleapiprodscus.blob.core.windows.net/*)
-        curl -fsSL -G "$origin/api/download" --data-urlencode "url=$src" -o "$out" \
-          && echo "saved → $out" ;;
-      *)
-        curl -fsSL -A "Mozilla/5.0" "$src" -o "$out" && echo "saved → $out" ;;
-    esac
+    if curl -fsSL -G "$origin/api/download" --data-urlencode "url=$src" -o "$out" 2>/dev/null \
+      || curl -fsSL -A "Mozilla/5.0" "$src" -o "$out"; then
+      echo "saved → $out"
+    else
+      exit 1
+    fi
     ;;
 
   credits)

@@ -108,8 +108,8 @@ tuned spring/stagger/easing — reuse before hand-rolling raw `text` scenes.
   precompute any randomness from an index/seed at module scope.
 - 3D: `@remotion/three` `ThreeCanvas` only, never r3f `useFrame`. Wrap async
   (fonts, remote images) in `delayRender`/`continueRender`. Use `OffthreadVideo`
-  for video. Media renders need a raised `timeoutInMilliseconds` +
-  `concurrencyPerLambda: 1` so the GL context doesn't time out.
+  for video. Media renders need a raised `timeoutInMilliseconds` and a
+  render concurrency of 1 so the GL context doesn't time out.
 
 **The see loop — never trust "JSON-valid == good"**
 
