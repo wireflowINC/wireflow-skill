@@ -13,9 +13,11 @@ This film came out of the command below with no options. [Watch it with sound](h
 
 You need Node 20 or newer. Nothing to install.
 
-**1. Get a free API key.** Sign up at Wireflow and make a key on the
-[API keys page](https://www.wireflow.ai/settings?tab=api-keys&section=api-keys&utm_source=github&utm_medium=readme&utm_campaign=open-flow).
-Tick `workflows:write` and `workflows:execute` (read access is on by default).
+**1. Get your free API key.**
+
+- Sign up free at [wireflow.ai](https://www.wireflow.ai/?utm_source=github&utm_medium=readme&utm_campaign=open-flow) and finish the short welcome steps (the key page opens after that).
+- Go to the [API keys page](https://www.wireflow.ai/settings?tab=api-keys&section=api-keys&utm_source=github&utm_medium=readme&utm_campaign=open-flow) and make a key.
+- Tick `workflows:write` and `workflows:execute`. Read access is already ticked.
 
 **2. Get the code.**
 
